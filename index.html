@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Performance Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="dark-mode">
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="header-top">
+                    <h1><i class="fas fa-graduation-cap"></i> Academic Dashboard</h1>
+                    <button id="theme-toggle" class="theme-toggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+                <div class="student-profile">
+                    <div class="profile-info">
+                        <i class="fas fa-user-circle"></i>
+                        <div>
+                            <span class="student-name">Student Name</span>
+                            <span class="student-grade">Grade: -</span>
+                        </div>
+                    </div>
+                    <button id="btn-profile" class="profile-btn">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </div>
+
+                <!-- Cloud sync pill -->
+                <div class="cloud-sync-pill" id="cloud-sync-pill">
+                    <div class="pill-row">
+                        <i class="fas fa-cloud"></i>
+                        <span id="cloud-user-label">Not signed in</span>
+                        <button id="btn-cloud-signin"><i class="fab fa-google"></i> Sign in</button>
+                        <button id="btn-cloud-signout" style="display:none;">Sign out</button>
+                    </div>
+                    <span class="sync-status" id="cloud-sync-status"></span>
+                </div>
+            </div>
+
+            <div class="sidebar-subjects">
+                <div class="section-header">
+                    <h3><i class="fas fa-book-open"></i> Subjects</h3>
+                    <button id="btn-add-subject" class="icon-btn">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <ul id="subject-list">
+                    <!-- Subjects populated by JavaScript -->
+                </ul>
+            </div>
+
+            <div class="color-filter-section">
+                <h4><i class="fas fa-palette"></i> Grade Filter</h4>
+                <div class="color-filters">
+                    <button class="color-filter active" data-color="all">
+                        <span class="filter-color all"></span>
+                        All
+                    </button>
+                    <button class="color-filter" data-color="excellent">
+                        <span class="filter-color excellent"></span>
+                        Excellent
+                    </button>
+                    <button class="color-filter" data-color="good">
+                        <span class="filter-color good"></span>
+                        Good
+                    </button>
+                    <button class="color-filter" data-color="average">
+                        <span class="filter-color average"></span>
+                        Average
+                    </button>
+                    <button class="color-filter" data-color="poor">
+                        <span class="filter-color poor"></span>
+                        Needs Help
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-actions">
+                <button id="btn-dashboard" class="sidebar-btn active">
+                    <i class="fas fa-chart-bar"></i> Dashboard
+                </button>
+                <button id="btn-export" class="sidebar-btn">
+                    <i class="fas fa-file-excel"></i> Export CSV
+                </button>
+                <button id="btn-import-csv" class="sidebar-btn">
+                    <i class="fas fa-file-import"></i> Import CSV
+                </button>
+                <input type="file" id="import-csv-input" accept=".csv" style="display:none">
+                <button id="btn-reset" class="sidebar-btn">
+                    <i class="fas fa-redo"></i> Reset All
+                </button>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="overall-progress">
+                    <div class="progress-info">
+                        <span>Total Average</span>
+                        <strong id="total-average">0%</strong>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="overall-progress"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="view active-view">
+                <header class="dashboard-header">
+                    <h2><i class="fas fa-tachometer-alt"></i> Student Overview</h2>
+                    <p>Visual analysis of your academic performance across all subjects</p>
+                </header>
+
+                <div class="dashboard-stats">
+                    <div class="stat-card slide-up">
+                        <div class="stat-icon">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="best-subject">Best Subject</h3>
+                            <p class="stat-value" id="best-grade">0%</p>
+                        </div>
+                    </div>
+
+                    <div class="stat-card slide-up" style="animation-delay: 0.1s">
+                        <div class="stat-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>Overall Average</h3>
+                            <p class="stat-value" id="overall-average">0%</p>
+                        </div>
+                    </div>
+
+                    <div class="stat-card slide-up" style="animation-delay: 0.2s">
+                        <div class="stat-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="weak-subject">Needs Improvement</h3>
+                            <p class="stat-value" id="weak-grade">0%</p>
+                        </div>
+                    </div>
+
+                    <div class="stat-card slide-up" style="animation-delay: 0.3s">
+                        <div class="stat-icon">
+                            <i class="fas fa-graduation-cap"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>GPA</h3>
+                            <p class="stat-value" id="gpa-value">0.0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-chart-container">
+                    <div class="chart-header">
+                        <h3><i class="fas fa-chart-bar"></i> Subject Performance Overview</h3>
+                        <div class="chart-controls">
+                            <button class="sort-btn active" data-sort="percentage">
+                                <i class="fas fa-sort-amount-down"></i> By Percentage
+                            </button>
+                            <button class="sort-btn" data-sort="alphabetical">
+                                <i class="fas fa-sort-alpha-down"></i> Alphabetical
+                            </button>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="overall-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subject Detail View -->
+            <div id="subject-view" class="view">
+                <header class="subject-header">
+                    <div class="header-left">
+                        <div class="header-actions">
+                            <button id="btn-back" class="back-button">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </button>
+                            <button id="btn-open-goal" class="back-button">
+                                <i class="fas fa-bullseye"></i> Set Goal
+                            </button>
+                        </div>
+                        <div class="subject-title">
+                            <h2 id="subject-name">Subject Name</h2>
+                            <p id="subject-description">Enter grades for each component to calculate final results</p>
+                        </div>
+                    </div>
+                    <div class="subject-summary">
+                        <div class="summary-card slide-up">
+                            <span>Class Test Average</span>
+                            <strong id="current-average">0%</strong>
+                        </div>
+                        <div class="summary-card slide-up" style="animation-delay: 0.05s">
+                            <span><i class="fas fa-filter"></i> Best of</span>
+                            <select id="best-n-select" class="best-n-select">
+                                <option value="all">All tests</option>
+                                <option value="1">Best 1</option>
+                                <option value="2">Best 2</option>
+                                <option value="3">Best 3</option>
+                                <option value="4">Best 4</option>
+                                <option value="5">Best 5</option>
+                                <option value="6">Best 6</option>
+                                <option value="7">Best 7</option>
+                                <option value="8">Best 8</option>
+                            </select>
+                        </div>
+                        <div class="summary-card slide-up" style="animation-delay: 0.1s">
+                            <span>Final Grade</span>
+                            <strong id="current-grade" class="grade-badge">-</strong>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="subject-content">
+                    <!-- Grade Table -->
+                    <div class="table-container">
+                        <div class="table-header">
+                            <h3><i class="fas fa-table"></i> Grade Calculator</h3>
+                            <div class="table-info">
+                                <i class="fas fa-arrows-alt-h"></i>
+                                <span>Scroll horizontally to view all columns</span>
+                            </div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table class="grade-table" id="grade-table">
+                                <thead>
+                                    <tr>
+                                        <th>Component</th>
+                                        <th>CT 1</th>
+                                        <th>CT 2</th>
+                                        <th>CT 3</th>
+                                        <th>CT 4</th>
+                                        <th>CT 5</th>
+                                        <th>CT 6</th>
+                                        <th>CT 7</th>
+                                        <th>CT 8</th>
+                                        <th>CT Avg</th>
+                                        <th>Semester</th>
+                                        <th>Final %</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Table rows populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Performance Chart -->
+                    <div class="chart-container">
+                        <h3><i class="fas fa-chart-line"></i> Performance Trend</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="performance-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profile-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-edit"></i> Profile Settings</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="student-name-input">
+                        <i class="fas fa-user"></i> Student Name
+                    </label>
+                    <input type="text" id="student-name-input" placeholder="Enter your name">
+                </div>
+
+
+                <div class="form-group">
+                    <label for="student-grade-input">
+                        <i class="fas fa-graduation-cap"></i> Grade
+                    </label>
+                    <select id="student-grade-input">
+                        <option value="" disabled selected>Select Grade</option>
+                        <option value="5">Grade 5</option>
+                        <option value="6">Grade 6</option>
+                        <option value="7">Grade 7</option>
+                        <option value="8">Grade 8</option>
+                        <option value="9">Grade 9</option>
+                        <option value="10">Grade 10</option>
+                    </select>
+                </div>
+
+                <div id="grade-10-options" style="display: none;">
+                    <div class="form-group">
+                        <label for="elective-ob-input">
+                            <i class="fas fa-microscope"></i> OB Elective
+                        </label>
+                        <select id="elective-ob-input">
+                            <option value="" disabled selected>Select OB Subject</option>
+                            <option value="cs">Computer Science</option>
+                            <option value="physics">Physics</option>
+                            <option value="biology">Biology</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="elective-oa-input">
+                            <i class="fas fa-flask"></i> OA Elective
+                        </label>
+                        <select id="elective-oa-input">
+                            <option value="" disabled selected>Select OA Subject</option>
+                            <option value="chemistry">Chemistry</option>
+                            <option value="economics">Economics</option>
+                            <option value="computing">Computing</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="section-title">
+                    <i class="fas fa-plus-circle"></i> Add New Subject
+                </div>
+                <div class="add-subject-form">
+                    <div class="form-group">
+                        <input type="text" id="new-subject-name" placeholder="Subject name">
+                        <button id="btn-confirm-add" class="btn-primary">
+                            <i class="fas fa-plus"></i> Add
+                        </button>
+                    </div>
+                    <div class="icon-selection">
+                        <div class="icon-options">
+                            <button class="icon-option" data-icon="fa-language"><i class="fas fa-language"></i></button>
+                            <button class="icon-option" data-icon="fa-code"><i class="fas fa-code"></i></button>
+                            <button class="icon-option" data-icon="fa-flask"><i class="fas fa-flask"></i></button>
+                            <button class="icon-option" data-icon="fa-calculator"><i
+                                    class="fas fa-calculator"></i></button>
+                            <button class="icon-option" data-icon="fa-book"><i class="fas fa-book"></i></button>
+                            <button class="icon-option" data-icon="fa-globe"><i class="fas fa-globe"></i></button>
+                            <button class="icon-option" data-icon="fa-running"><i class="fas fa-running"></i></button>
+                            <button class="icon-option" data-icon="fa-pencil-alt"><i
+                                    class="fas fa-pencil-alt"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-title">
+                    <i class="fas fa-list"></i> Manage Subjects
+                </div>
+                <div class="manage-subjects" id="manage-subjects-list">
+                    <!-- Subjects list for management -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-save-profile" class="btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+                <button class="btn-secondary close-modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goal Calculator Modal -->
+    <div id="goal-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-bullseye"></i> Grade Goal Calculator</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Calculate what you need to achieve your target grade.</p>
+
+                <div class="form-group">
+                    <label for="target-grade-select">Target Grade</label>
+                    <select id="target-grade-select">
+                        <option value="5">Grade 5 (Excellent)</option>
+                        <option value="4">Grade 4 (Good)</option>
+                        <option value="3">Grade 3 (Average)</option>
+                    </select>
+                </div>
+
+                <div class="goal-results" id="goal-results"
+                    style="display: none; margin-top: 20px; padding: 15px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
+                    <!-- Results populated by JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-calculate-goal" class="btn-primary">
+                    <i class="fas fa-calculator"></i> Calculate
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div id="custom-confirm-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-question-circle"></i> Confirmation</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-modal-confirm" class="btn-primary">
+                    OK
+                </button>
+                <button id="btn-modal-cancel" class="btn-secondary">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Confirmation Modal -->
+    <div id="reset-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Confirm Reset</h3>
+            </div>
+            <div class="modal-body">
+                <div class="warning-icon">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <p>Are you sure you want to reset all grades?</p>
+                <p class="warning-text">
+                    <i class="fas fa-info-circle"></i> This action will delete all entered grades and cannot be
+                    undone.
+                </p>
+                <div class="reset-options">
+                    <label>
+                        <input type="checkbox" id="reset-subjects">
+                        <span>Also remove custom subjects</span>
+                    </label>
+                    <small style="display: block; margin-top: 8px; color: var(--text-secondary); font-size: 0.85rem;">
+                        <i class="fas fa-info-circle"></i> Default subjects will always remain
+                    </small>
+                    <label style="margin-top: 12px;">
+                        <input type="checkbox" id="reset-profile-data">
+                        <span>Also delete profile data (Name, Grade)</span>
+                    </label>
+                    <small style="display: block; margin-top: 4px; color: var(--danger-color); font-size: 0.85rem;">
+                        <i class="fas fa-exclamation-circle"></i> This will reload the page
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-confirm-reset" class="btn-danger">
+                    <i class="fas fa-trash-alt"></i> Yes, Reset All Data
+                </button>
+                <button class="btn-secondary close-modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <div class="toast-content">
+            <i class="fas fa-check-circle"></i>
+            <span id="toast-message"></span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script type="module" src="firebase-init.js"></script>
+</body>
+
+</html>
