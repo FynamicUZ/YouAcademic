@@ -1447,6 +1447,30 @@ function initApp() {
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('btn-add-subject').addEventListener('click', showProfileModal);
 
+    // Mobile sidebar drawer wiring
+    const sidebar = document.querySelector('.sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const openMobileMenu = () => {
+        sidebar.classList.add('open');
+        backdrop.classList.add('active');
+    };
+    const closeMobileMenu = () => {
+        sidebar.classList.remove('open');
+        backdrop.classList.remove('active');
+    };
+    document.getElementById('btn-mobile-menu').addEventListener('click', openMobileMenu);
+    document.getElementById('btn-sidebar-close').addEventListener('click', closeMobileMenu);
+    backdrop.addEventListener('click', closeMobileMenu);
+
+    // Auto-close the drawer when a sidebar action is tapped on mobile.
+    // Use delegation since subjects are re-rendered dynamically.
+    sidebar.addEventListener('click', (e) => {
+        const target = e.target.closest('.sidebar-btn, .subject-item');
+        if (target && window.matchMedia('(max-width: 992px)').matches) {
+            closeMobileMenu();
+        }
+    });
+
     // Color filter buttons
     document.querySelectorAll('.color-filter').forEach(btn => {
         btn.addEventListener('click', function () {
@@ -1756,20 +1780,59 @@ function enhanceSelect(selectEl) {
         trigger.querySelector('.custom-select-label').textContent = sel ? sel.textContent : '';
     }
 
+    function positionList() {
+        const rect = trigger.getBoundingClientRect();
+        const listHeight = list.offsetHeight || 280;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openUp = spaceBelow < listHeight + 12 && rect.top > listHeight + 12;
+        list.style.position = 'fixed';
+        list.style.left = rect.left + 'px';
+        list.style.minWidth = rect.width + 'px';
+        if (openUp) {
+            list.style.top = (rect.top - listHeight - 6) + 'px';
+        } else {
+            list.style.top = (rect.bottom + 6) + 'px';
+        }
+    }
+
     function open() {
         // Close any other open dropdowns
-        document.querySelectorAll('.custom-select.open').forEach(o => { if (o !== wrap) o.classList.remove('open'); });
+        document.querySelectorAll('.custom-select-options.cs-open').forEach(o => o.classList.remove('cs-open'));
+        document.querySelectorAll('.custom-select.open').forEach(o => o.classList.remove('open'));
+
         wrap.classList.add('open');
+        // Portal the list to <body> so no ancestor overflow/transform/stacking can clip it
+        if (list.parentElement !== document.body) document.body.appendChild(list);
+        list.classList.add('cs-open');
+        positionList();
+
         document.addEventListener('click', onDocClick);
         document.addEventListener('keydown', onKey);
+        window.addEventListener('resize', close);
+        // capture=true to catch scrolls on inner scrollable elements (they don't bubble)
+        window.addEventListener('scroll', onOuterScroll, true);
     }
+
     function close() {
         wrap.classList.remove('open');
+        list.classList.remove('cs-open');
+        list.style.position = '';
+        list.style.top = '';
+        list.style.left = '';
+        list.style.minWidth = '';
         document.removeEventListener('click', onDocClick);
         document.removeEventListener('keydown', onKey);
+        window.removeEventListener('resize', close);
+        window.removeEventListener('scroll', onOuterScroll, true);
     }
-    function onDocClick(e) { if (!wrap.contains(e.target)) close(); }
+    function onDocClick(e) { if (!wrap.contains(e.target) && !list.contains(e.target)) close(); }
     function onKey(e) { if (e.key === 'Escape') close(); }
+    // Only close if the scroll happened OUTSIDE the dropdown list itself —
+    // scrolling within the options (to reach Best 7/8) must keep it open.
+    function onOuterScroll(e) {
+        if (list.contains(e.target) || e.target === list) return;
+        close();
+    }
 
     trigger.addEventListener('click', (e) => {
         e.stopPropagation();

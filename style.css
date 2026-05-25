@@ -1504,6 +1504,85 @@ body {
     font-size: 1.2rem;
 }
 
+/* =====================================================================
+   Mobile top bar + sidebar drawer (shown only at ≤992px via media queries)
+   ===================================================================== */
+.mobile-topbar {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    z-index: 200;
+    box-shadow: var(--shadow);
+}
+
+.mobile-menu-btn {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.mobile-menu-btn:hover { background: var(--bg-secondary); }
+
+.mobile-topbar-title {
+    font-weight: 700;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+}
+.mobile-topbar-title i { color: var(--primary-color); }
+
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 150;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.sidebar-backdrop.active {
+    display: block;
+    opacity: 1;
+}
+
+.header-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-close-btn {
+    display: none;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
     .sidebar {
@@ -1526,39 +1605,58 @@ body {
 }
 
 @media (max-width: 992px) {
-    /* Below this width, 12-column tables genuinely can't fit — re-enable scrolling */
+    /* Re-enable normal page scrolling (desktop locks the viewport) */
     html, body {
         height: auto;
         overflow: auto;
     }
 
+    /* Show the mobile top bar and sidebar close button */
+    .mobile-topbar { display: flex; }
+    .sidebar-close-btn { display: flex; }
+
+    /* Container becomes a single column; main content takes the full width */
     .container {
         flex-direction: column;
         height: auto;
         overflow: visible;
     }
 
+    /* Sidebar becomes a slide-in drawer from the left */
     .sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-        padding: 20px;
-        overflow-y: visible;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 86%;
+        max-width: 320px;
+        height: 100vh;
+        padding: 16px 18px;
+        overflow-y: auto;
+        z-index: 250;
+        transform: translateX(-100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    }
+    .sidebar.open {
+        transform: translateX(0);
     }
 
+    /* Main content: full width, padding-top accounts for the fixed mobile topbar */
     .main-content {
         margin-left: 0;
-        padding: 20px;
+        padding: 16px;
+        padding-top: 68px;  /* 52px topbar + 16px gap */
         height: auto;
+        min-height: 100vh;
         overflow: visible;
         display: block;
     }
 
+    /* Views relax their viewport-locked flex layout */
     .view {
         flex: none;
         min-height: 0;
     }
-
     .view.active-view {
         display: block;
         overflow: visible;
@@ -1575,13 +1673,18 @@ body {
         flex: none;
     }
 
+    /* Grade table: horizontal scroll inside its card */
     .table-wrapper {
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
-
     .grade-table {
-        min-width: 1000px;
+        min-width: 900px;
         table-layout: auto;
+    }
+    .grade-input {
+        width: 64px;
+        max-width: 64px;
     }
 
     .subject-content {
@@ -1591,18 +1694,23 @@ body {
 
     .subject-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
     }
-
     .subject-summary {
         width: 100%;
         justify-content: space-between;
+        gap: 8px;
+    }
+    .summary-card {
+        flex: 1;
+        min-width: 0;
     }
 }
 
 @media (max-width: 768px) {
+    /* Stats grid: 2 columns on tablet */
     .dashboard-stats {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
     }
 
     .chart-header {
@@ -1614,34 +1722,31 @@ body {
         width: 100%;
         justify-content: space-between;
     }
-
     .sort-btn {
         flex: 1;
         justify-content: center;
     }
 
     .subject-summary {
-        flex-direction: column;
-        gap: 12px;
+        flex-wrap: wrap;
+        gap: 8px;
     }
-
     .summary-card {
-        min-width: auto;
+        flex: 1 1 calc(50% - 4px);
+        min-width: 0;
     }
 
     .chart-wrapper {
-        height: 300px;
+        height: 280px;
     }
 
     .grade-table {
         font-size: 0.85rem;
     }
-
     .grade-table th,
     .grade-table td {
-        padding: 12px 8px;
+        padding: 10px 8px;
     }
-
     .grade-input {
         width: 60px;
         max-width: 60px;
@@ -1650,53 +1755,77 @@ body {
     }
 
     .color-filters {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Modal: tighter side padding */
+    .modal-content {
+        width: calc(100vw - 24px);
+        max-width: 520px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+    }
+
+    /* Custom-select popup width-aware on mobile */
+    .custom-select-options {
+        max-width: calc(100vw - 24px);
     }
 }
 
 @media (max-width: 576px) {
+    .mobile-topbar-title { font-size: 0.95rem; }
+    .mobile-topbar-title i { display: none; }
+
     .main-content {
-        padding: 15px;
+        padding: 12px;
+        padding-top: 64px;
     }
 
-    .dashboard-header h2 {
-        font-size: 1.5rem;
+    /* Stats: single column on small phones */
+    .dashboard-stats {
+        grid-template-columns: 1fr;
     }
+
+    .dashboard-header { margin-bottom: 8px; padding-bottom: 8px; }
+    .dashboard-header h2 { font-size: 1.2rem; }
+    .dashboard-header p { font-size: 0.85rem; }
 
     .table-container,
-    .chart-container {
-        padding: 20px;
+    .chart-container,
+    .dashboard-chart-container {
+        padding: 14px 12px;
     }
 
     .chart-wrapper {
-        height: 250px;
+        height: 240px;
     }
 
-    .sidebar-actions button {
-        padding: 12px;
-        font-size: 0.9rem;
-    }
+    /* Subject header stacks tighter */
+    .subject-header { padding: 12px 14px; }
+    .subject-title h2 { font-size: 1.1rem; }
+    .header-actions { flex-wrap: wrap; gap: 8px; }
+    .back-button { padding: 8px 14px; font-size: 0.85rem; }
+
+    /* Summary cards stack 1-per-row on tiny screens */
+    .subject-summary { flex-direction: column; }
+    .summary-card { flex: none; width: 100%; }
 
     .toast {
-        left: 15px;
-        right: 15px;
-        bottom: 15px;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
         max-width: none;
+        padding: 12px 16px;
     }
 
     .modal-content {
-        width: 95%;
-        margin: 10px;
+        width: calc(100vw - 16px);
+        margin: 8px;
+        padding: 0;
     }
-
-    #reset-modal .modal-footer {
-        flex-direction: column;
-    }
-
-    #reset-modal .btn-danger,
-    #reset-modal .btn-secondary {
-        width: 100%;
-    }
+    .modal-body, .modal-header, .modal-footer { padding: 14px 16px; }
+    .modal-footer { flex-direction: column-reverse; gap: 8px; }
+    .modal-footer button { width: 100%; }
 }
 
 /* Scrollbar Styling */
@@ -1801,12 +1930,11 @@ select:not([data-enhanced]) {
     transform: rotate(180deg);
 }
 
+/* Options list — portaled to <body> on open so no ancestor can clip it.
+   display:none keeps it out of layout entirely while closed (no reserved
+   height inside the summary card). */
 .custom-select-options {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    right: 0;
-    min-width: 100%;
+    display: none;
     max-height: 280px;
     overflow-y: auto;
     margin: 0;
@@ -1816,20 +1944,17 @@ select:not([data-enhanced]) {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-lg);
-    z-index: 1100;
-    opacity: 0;
-    transform: translateY(-4px);
-    visibility: hidden;
-    pointer-events: none;
-    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+    z-index: 9999;
 }
 
-.custom-select.open .custom-select-options {
-    opacity: 1;
-    transform: translateY(0);
-    visibility: visible;
-    pointer-events: auto;
-    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s;
+.custom-select-options.cs-open {
+    display: block;
+    animation: cs-open-fade 0.12s ease-out;
+}
+
+@keyframes cs-open-fade {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .custom-select-option {
