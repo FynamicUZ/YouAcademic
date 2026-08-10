@@ -118,26 +118,42 @@ if (!CONFIGURED) {
     let pendingPayloadJson = null; // JSON of the payload waiting to be pushed (for beforeunload flush)
     let suppressNextSave = false; // true while we just pulled cloud data into local state
 
-    // Build the comparable payload (no updatedAt) for diffing local vs cloud
+    // Schema 2 stores every grade/semester the student has recorded. Schema 1
+    // (documents written before multi-period support) held a single semester at
+    // the top level as studentInfo/subjects/grades.
+    const SCHEMA_VERSION = 2;
+
+    // Build the comparable payload (no updatedAt) for diffing local vs cloud.
+    // Delegates to script.js so the shape is defined in exactly one place —
+    // reading window.appState.subjects directly would only capture the ACTIVE
+    // period, silently leaving every other semester out of the cloud copy.
     function buildLocalPayload() {
-        const s = window.appState || {};
-        return {
-            studentInfo: {
-                name: s.studentName || '',
-                grade: s.grade || '',
-                electiveOB: s.electiveOB || '',
-                electiveOA: s.electiveOA || ''
-            },
-            subjects: s.subjects || [],
-            grades: s.grades || {}
-        };
+        const state = window.__buildStatePayload ? window.__buildStatePayload() : {};
+        return { schemaVersion: SCHEMA_VERSION, ...state };
     }
 
+    // Normalise a cloud document into the schema-2 shape, upgrading old documents
+    // through the same migration the local storage path uses.
     function buildCloudPayload(cloud) {
+        if (!cloud || cloud.schemaVersion !== SCHEMA_VERSION) {
+            const migrated = window.__migrateV1
+                ? window.__migrateV1(
+                    (cloud && cloud.studentInfo) || {},
+                    (cloud && cloud.subjects) || [],
+                    (cloud && cloud.grades) || {}
+                )
+                : {};
+            return { schemaVersion: SCHEMA_VERSION, ...migrated };
+        }
+
         return {
-            studentInfo: cloud.studentInfo || {},
-            subjects: Array.isArray(cloud.subjects) ? cloud.subjects : [],
-            grades: (cloud.grades && typeof cloud.grades === 'object') ? cloud.grades : {}
+            schemaVersion: SCHEMA_VERSION,
+            studentName: cloud.studentName || '',
+            activePeriod: cloud.activePeriod || '',
+            anchorGrade: cloud.anchorGrade || '',
+            anchorYearStart: cloud.anchorYearStart || 0,
+            rolloverDismissedFor: cloud.rolloverDismissedFor || '',
+            periods: (cloud.periods && typeof cloud.periods === 'object') ? cloud.periods : {}
         };
     }
 
@@ -206,7 +222,9 @@ if (!CONFIGURED) {
             const ref = doc(db, 'users', uid, 'data', 'dashboard');
             const snap = await getDoc(ref);
 
-            const localHasData = (window.appState?.subjects?.length || 0) > 0
+            // Check every period, not just the active one — a student could be
+            // sitting on an empty new semester with years of history behind it.
+            const localHasData = Object.keys(window.appState?.periods || {}).length > 0
                 || (window.appState?.studentName?.length || 0) > 0;
 
             if (!snap.exists()) {
@@ -289,23 +307,21 @@ if (!CONFIGURED) {
 
     function applyCloudData(cloud) {
         suppressNextSave = true;
-        const s = window.appState;
-        if (cloud.studentInfo) {
-            s.studentName = cloud.studentInfo.name || '';
-            s.grade = cloud.studentInfo.grade || '';
-            s.electiveOB = cloud.studentInfo.electiveOB || '';
-            s.electiveOA = cloud.studentInfo.electiveOA || '';
+
+        // Normalise (and migrate, if it's an old document) before applying
+        const payload = buildCloudPayload(cloud);
+        if (typeof window.__applyStatePayload === 'function') {
+            window.__applyStatePayload(payload);
         }
-        if (Array.isArray(cloud.subjects)) s.subjects = cloud.subjects;
-        if (cloud.grades && typeof cloud.grades === 'object') s.grades = cloud.grades;
 
         // Persist to localStorage and refresh UI through existing entry points
         if (typeof window.saveAllData === 'function') window.saveAllData();
+        if (typeof window.renderPeriodSelect === 'function') window.renderPeriodSelect();
         if (typeof window.renderSidebar === 'function') window.renderSidebar();
         if (typeof window.renderDashboard === 'function') window.renderDashboard();
         suppressNextSave = false;
         // Local now matches the pulled cloud copy
-        rememberSignature(stableStringify(buildCloudPayload(cloud)));
+        rememberSignature(stableStringify(payload));
     }
 
     async function pushToCloud(uid) {

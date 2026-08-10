@@ -2265,3 +2265,167 @@ select:not([data-enhanced]) {
 .cloud-sync-pill .sync-status.error {
     color: var(--danger-color);
 }
+
+/* =========================================================================
+   Period switcher — which grade/semester the dashboard is showing
+   ========================================================================= */
+
+.period-switcher {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-sm);
+}
+
+.period-switcher label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.period-switcher label i {
+    margin-right: 4px;
+    color: var(--primary-color);
+}
+
+/* The enhanced dropdown replaces the native select, so size the wrapper */
+.period-switcher .custom-select {
+    width: 100%;
+}
+
+.period-switcher .custom-select-trigger {
+    width: 100%;
+    font-weight: 600;
+}
+
+/* =========================================================================
+   History view
+   ========================================================================= */
+
+.history-empty {
+    padding: 60px 24px;
+    text-align: center;
+    background: var(--bg-card);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.history-empty i {
+    margin-bottom: 16px;
+    font-size: 2.5rem;
+    color: var(--primary-color);
+    opacity: 0.5;
+}
+
+.history-empty h3 {
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.history-empty p {
+    color: var(--text-secondary);
+}
+
+#history-content .dashboard-chart-container,
+#history-content .table-container {
+    margin-bottom: 24px;
+}
+
+/* The dashboard sizes its chart by flexing to fill one screen. History stacks
+   three blocks and scrolls instead, so its charts need an explicit height —
+   without it `.chart-wrapper { flex: 1; min-height: 0 }` collapses to nothing. */
+#history-content .dashboard-chart-container {
+    display: block;
+    flex: none;
+}
+
+#history-content .chart-wrapper {
+    height: 320px;
+    flex: none;
+}
+
+/* Comparison table — one column per period */
+.history-table td:first-child,
+.history-table th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 170px;
+    background: var(--bg-card);
+}
+
+.history-table td:first-child i {
+    margin-right: 8px;
+    color: var(--primary-color);
+}
+
+.history-cell {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 62px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.history-cell small {
+    font-size: 0.7rem;
+    font-weight: 700;
+    opacity: 0.75;
+}
+
+.history-cell.empty {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-weight: 400;
+    opacity: 0.5;
+}
+
+.history-footer-row td {
+    border-top: 2px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.history-footer-row td:first-child {
+    background: var(--bg-secondary);
+}
+
+/* =========================================================================
+   Profile modal additions
+   ========================================================================= */
+
+.section-hint {
+    margin: -6px 0 12px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.section-hint i {
+    margin-right: 4px;
+    color: var(--primary-color);
+}
+
+.btn-block {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 12px;
+}
+
+/* Reset modal scope radios sit in the same list as the existing checkboxes */
+.reset-options input[type="radio"] {
+    margin-right: 8px;
+    accent-color: var(--primary-color);
+}
