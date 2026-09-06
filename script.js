@@ -255,6 +255,14 @@ function migrateV1(studentInfo, subjects, grades) {
     const oa = studentInfo.electiveOA || '';
     const key = periodKey(grade || ALL_GRADES[ALL_GRADES.length - 1], 2);
 
+    // The v1 record is semester 2. Once September has come round we are already
+    // in semester 1 of a NEW academic year, so that semester-2 data belongs to
+    // the year that just ended - not the one currently running. Anchoring it to
+    // the running year is what left migrated students stuck on last semester.
+    const anchorYearStart = currentSemester() === 1
+        ? currentAcademicYearStart() - 1
+        : currentAcademicYearStart();
+
     const record = createPeriodRecord(grade, 2, ob, oa);
     record.subjects = Array.isArray(subjects) ? subjects : [];
     record.grades = (grades && typeof grades === 'object') ? grades : {};
@@ -263,13 +271,36 @@ function migrateV1(studentInfo, subjects, grades) {
         studentName: studentInfo.name || '',
         activePeriod: key,
         anchorGrade: grade,
-        // The v1 data belongs to the academic year that is current at migration time.
-        anchorYearStart: currentAcademicYearStart(),
+        anchorYearStart,
         rolloverDismissedFor: '',
         periods: { [key]: record }
     };
 }
 window.__migrateV1 = migrateV1;
+
+// A semester-2 record can never belong to the academic year we are currently in
+// semester 1 of. When the stored anchor dates it that way the anchor is a year
+// too new, expectedPeriod() lands behind the active period, and the new-school-
+// year prompt can never fire. This repairs data migrated before the fix above.
+function repairAnchor(now = new Date()) {
+    if (!appState.anchorGrade || !appState.anchorYearStart) return;
+    if (currentSemester(now) !== 1) return;
+
+    const latest = Object.keys(appState.periods)
+        .sort((a, b) => periodOrder(b) - periodOrder(a))[0];
+    // Only the "sitting on my most recent semester 2" case is ambiguous. If the
+    // student is parked on some earlier period, leave the anchor alone.
+    if (!latest || latest !== appState.activePeriod) return;
+
+    const [grade, semester] = latest.split('-').map(Number);
+    if (semester !== 2) return;
+
+    const thisYear = currentAcademicYearStart(now);
+    const recordYear = appState.anchorYearStart + (grade - Number(appState.anchorGrade));
+    if (recordYear >= thisYear) {
+        appState.anchorYearStart -= (recordYear - thisYear + 1);
+    }
+}
 
 // Fill in anything a loaded/migrated payload is missing, and normalise old records.
 function normalizeState() {
@@ -295,6 +326,8 @@ function normalizeState() {
         const existing = Object.keys(appState.periods).sort((a, b) => periodOrder(b) - periodOrder(a));
         appState.activePeriod = existing[0] || '';
     }
+
+    repairAnchor();
 }
 
 // Apply a plain v2 payload onto appState (used by load and by cloud sync)
@@ -2146,6 +2179,10 @@ function showConfirmModal(message, onConfirm, onCancel) {
     });
 }
 
+// The period already offered this session. A cloud sync landing after startup
+// re-runs the check, and without this it would stack a second identical prompt.
+let rolloverOfferedFor = '';
+
 // Offer to move into the new school year once September rolls around.
 // Declining is remembered so the prompt doesn't reappear every reload.
 function checkAcademicYearRollover() {
@@ -2155,6 +2192,13 @@ function checkAcademicYearRollover() {
     // Only ever move forward, and never re-ask about a period already declined
     if (periodOrder(expected) <= periodOrder(appState.activePeriod)) return;
     if (appState.rolloverDismissedFor === expected) return;
+    if (rolloverOfferedFor === expected) return;
+
+    // The profile modal is mandatory until name and grade exist - don't compete with it
+    const profileModal = document.getElementById('profile-modal');
+    if (profileModal && profileModal.classList.contains('mandatory')) return;
+
+    rolloverOfferedFor = expected;
 
     const [grade, semester] = expected.split('-');
     const isNewGrade = grade !== appState.grade;
@@ -2172,6 +2216,7 @@ function checkAcademicYearRollover() {
         }
     );
 }
+window.checkAcademicYearRollover = checkAcademicYearRollover;
 
 // Initialize the application
 function initApp() {
@@ -2526,10 +2571,7 @@ function initApp() {
     setTimeout(() => {
         showToast('Welcome to Academic Dashboard! Start by entering your grades.');
 
-        const profileModal = document.getElementById('profile-modal');
-        if (!profileModal.classList.contains('mandatory')) {
-            checkAcademicYearRollover();
-        }
+        checkAcademicYearRollover();
     }, 1000);
 }
 

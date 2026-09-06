@@ -320,6 +320,13 @@ if (!CONFIGURED) {
         if (typeof window.renderSidebar === 'function') window.renderSidebar();
         if (typeof window.renderDashboard === 'function') window.renderDashboard();
         suppressNextSave = false;
+
+        // The cloud copy carries its own activePeriod and anchor, and it lands
+        // after the startup check has already run. Re-offer the new school year
+        // here or the prompt is simply never seen by a synced student.
+        if (typeof window.checkAcademicYearRollover === 'function') {
+            window.checkAcademicYearRollover();
+        }
         // Local now matches the pulled cloud copy
         rememberSignature(stableStringify(payload));
     }
