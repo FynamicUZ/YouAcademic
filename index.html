@@ -111,6 +111,9 @@
                 <button id="btn-dashboard" class="sidebar-btn active">
                     <i class="fas fa-chart-bar"></i> Dashboard
                 </button>
+                <button id="btn-timetable" class="sidebar-btn">
+                    <i class="fas fa-calendar-day"></i> Timetable
+                </button>
                 <button id="btn-history" class="sidebar-btn">
                     <i class="fas fa-timeline"></i> History
                 </button>
@@ -297,6 +300,25 @@
             </div>
 
             <!-- History View — progress across every recorded period -->
+            <!-- Timetable View -->
+            <div id="timetable-view" class="view">
+                <header class="dashboard-header">
+                    <h2><i class="fas fa-calendar-day"></i> Timetable</h2>
+                    <p>Your lessons for the day — <span id="timetable-meta"></span></p>
+                </header>
+
+                <div class="timetable-days" id="timetable-days">
+                    <!-- Day tabs populated by JavaScript -->
+                </div>
+
+                <!-- Shown when the grade or stream has no timetable behind it -->
+                <div id="timetable-empty" class="history-empty" style="display:none;"></div>
+
+                <div class="timetable-list" id="timetable-body">
+                    <!-- Lessons populated by JavaScript -->
+                </div>
+            </div>
+
             <div id="history-view" class="view">
                 <header class="dashboard-header">
                     <h2><i class="fas fa-timeline"></i> Academic History</h2>
@@ -387,6 +409,18 @@
                         <option value="9">Grade 9</option>
                         <option value="10">Grade 10</option>
                         <option value="11">Grade 11</option>
+                    </select>
+                </div>
+
+                <!-- Blue and Green run different timetables, so the stream picks which one to show -->
+                <div class="form-group">
+                    <label for="student-stream-input">
+                        <i class="fas fa-code-branch"></i> Class
+                    </label>
+                    <select id="student-stream-input">
+                        <option value="" disabled selected>Select Class</option>
+                        <option value="blue">Blue</option>
+                        <option value="green">Green</option>
                     </select>
                 </div>
 
@@ -574,6 +608,8 @@
         </div>
     </div>
 
+    <!-- Timetable data must load before script.js reads it -->
+    <script src="timetable-data.js"></script>
     <script src="script.js"></script>
     <script type="module" src="firebase-init.js"></script>
 </body>

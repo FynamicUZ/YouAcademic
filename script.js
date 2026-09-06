@@ -111,12 +111,13 @@ function allPeriodKeys() {
 }
 
 // Create an empty period record for a grade/semester
-function createPeriodRecord(grade, semester, ob = '', oa = '') {
+function createPeriodRecord(grade, semester, ob = '', oa = '', stream = '') {
     return {
         grade: String(grade),
         semester: Number(semester),
         electiveOB: ob,
         electiveOA: oa,
+        stream: stream, // 'blue' | 'green' — which timetable this class follows
         subjects: [],
         grades: {}
     };
@@ -133,6 +134,7 @@ const appState = {
     sortMode: 'percentage',
     colorFilter: 'all',
     historySubject: null, // Which subject the history trend chart is showing
+    timetableDay: '',     // Weekday key the timetable view is showing; re-derived on entry
     activePeriod: '',     // e.g. '10-2'
     anchorGrade: '',      // The grade the student was in during anchorYearStart
     anchorYearStart: 0,   // Calendar year the anchor academic year began (e.g. 2025 => 2025–2026)
@@ -168,7 +170,8 @@ function ensurePeriod(key) {
         .sort((a, b) => periodOrder(b) - periodOrder(a))[0];
     const source = earlier ? appState.periods[earlier] : null;
 
-    const record = createPeriodRecord(grade, semester, source?.electiveOB || '', source?.electiveOA || '');
+    const record = createPeriodRecord(grade, semester, source?.electiveOB || '',
+        source?.electiveOA || '', source?.stream || '');
     appState.periods[key] = record;
 
     // Populate the subject list for this grade
@@ -191,7 +194,7 @@ function periodHasData(key) {
 
 // Proxy the per-period fields onto appState so the ~70 existing references to
 // appState.subjects / appState.grades / appState.grade keep working unchanged.
-['subjects', 'grades', 'grade', 'electiveOB', 'electiveOA'].forEach(key => {
+['subjects', 'grades', 'grade', 'electiveOB', 'electiveOA', 'stream'].forEach(key => {
     Object.defineProperty(appState, key, {
         get() { return activePeriodRecord()[key]; },
         set(value) { activePeriodRecord()[key] = value; },
@@ -312,6 +315,7 @@ function normalizeState() {
         record.semester = Number(record.semester || semester);
         record.electiveOB = record.electiveOB || '';
         record.electiveOA = record.electiveOA || '';
+        record.stream = record.stream || ''; // absent on data saved before the timetable existed
         if (!Array.isArray(record.subjects)) record.subjects = [];
         if (!record.grades || typeof record.grades !== 'object') record.grades = {};
 
@@ -398,6 +402,7 @@ function checkProfileStatus() {
         // Populate fields if they have partial data
         document.getElementById('student-name-input').value = appState.studentName;
         setSelectValue(document.getElementById('student-grade-input'), appState.grade);
+        setSelectValue(document.getElementById('student-stream-input'), appState.stream);
         if (hasElectives(appState.grade)) {
             document.getElementById('elective-options').style.display = 'block';
             populateElectiveOptions(appState.grade, appState.electiveOB, appState.electiveOA);
@@ -733,6 +738,8 @@ function showView(name) {
     document.getElementById('btn-dashboard').classList.toggle('active', name === 'dashboard');
     const historyBtn = document.getElementById('btn-history');
     if (historyBtn) historyBtn.classList.toggle('active', name === 'history');
+    const timetableBtn = document.getElementById('btn-timetable');
+    if (timetableBtn) timetableBtn.classList.toggle('active', name === 'timetable');
 }
 
 // Switch to subject view
@@ -779,6 +786,20 @@ function switchToHistory() {
     });
 
     renderHistory();
+}
+
+// Switch to the weekly timetable. Re-entering always re-derives the day, so a
+// tab left open past 15:30 shows tomorrow the next time it's opened.
+function switchToTimetable() {
+    appState.currentSubject = null;
+    appState.timetableDay = defaultTimetableDay();
+    showView('timetable');
+
+    document.querySelectorAll('.subject-item').forEach(item => {
+        item.classList.remove('active');
+    });
+
+    renderTimetable();
 }
 
 // Render subject view
@@ -1669,6 +1690,188 @@ function renderHistoryTable(keys) {
     tbody.appendChild(footRow);
 }
 
+// =============================================================================
+// Timetable — the weekly lesson grid for the active period's grade and stream.
+// Data lives in timetable-data.js; this half resolves it against the student.
+// =============================================================================
+
+// After this time of day the timetable jumps ahead to the next school day,
+// since the current one is effectively over.
+const TIMETABLE_LOOKAHEAD_MINUTES = 15 * 60 + 30; // 15:30
+
+function minutesOfDay(time) {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+}
+
+function streamLabel(key) {
+    const stream = STREAMS.find(s => s.key === key);
+    return stream ? stream.label : '';
+}
+
+// The week for the active period, or null when the grade or stream isn't known
+function activeTimetable() {
+    const byGrade = TIMETABLES[String(appState.grade)];
+    if (!byGrade || !appState.stream) return null;
+    return byGrade[appState.stream] || null;
+}
+
+// Which day to open on: today until 15:30, then tomorrow. Weekends and Friday
+// evening both roll forward to Monday.
+function defaultTimetableDay(now = new Date()) {
+    const dayOfWeek = now.getDay(); // 0 = Sunday
+    if (dayOfWeek === 0 || dayOfWeek === 6) return 'mon';
+
+    const todayIndex = dayOfWeek - 1; // Monday = 0
+    if (now.getHours() * 60 + now.getMinutes() < TIMETABLE_LOOKAHEAD_MINUTES) {
+        return WEEKDAYS[todayIndex].key;
+    }
+    return WEEKDAYS[(todayIndex + 1) % WEEKDAYS.length].key;
+}
+
+// 'Today' / 'Tomorrow' badge for a day, or '' when it is neither
+function dayRelation(dayKey, now = new Date()) {
+    const dayOfWeek = now.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return '';
+
+    const todayIndex = dayOfWeek - 1;
+    if (WEEKDAYS[todayIndex].key === dayKey) return 'Today';
+    // Friday has no next weekday, so it never reports a tomorrow
+    const tomorrowIndex = todayIndex + 1;
+    if (tomorrowIndex < WEEKDAYS.length && WEEKDAYS[tomorrowIndex].key === dayKey) return 'Tomorrow';
+    return '';
+}
+
+// Lesson number currently in progress, or 0 between lessons / outside school hours
+function currentLessonNumber(now = new Date()) {
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const lesson = LESSON_TIMES.find(l =>
+        minutes >= minutesOfDay(l.start) && minutes < minutesOfDay(l.end));
+    return lesson ? lesson.n : 0;
+}
+
+// Turn a stored cell into something renderable, resolving the shared elective
+// blocks ('@ob' / '@oa') down to the subject this student actually takes.
+function resolveTimetableCell(cell) {
+    if (!cell) return null;
+
+    const [key, room, teacher] = cell;
+    let subjectId = key;
+    let block = '';
+
+    if (key === '@ob' || key === '@oa') {
+        block = key === '@ob' ? 'OB' : 'OA';
+        const picked = key === '@ob' ? appState.electiveOB : appState.electiveOA;
+        if (!picked) {
+            return { name: `${block} elective`, icon: 'fa-question-circle', room, teacher, block, subjectId: null };
+        }
+        subjectId = picked;
+    }
+
+    const detail = SUBJECT_DETAILS[subjectId] || TIMETABLE_EXTRAS[subjectId] ||
+        { name: subjectId, icon: 'fa-book' };
+
+    // Only link through to subjects this period actually tracks marks for
+    const tracked = appState.subjects.some(s => s.id === subjectId);
+    return { name: detail.name, icon: detail.icon, room, teacher, block, subjectId: tracked ? subjectId : null };
+}
+
+function renderTimetable() {
+    const dayKey = appState.timetableDay || defaultTimetableDay();
+    appState.timetableDay = dayKey;
+
+    const meta = document.getElementById('timetable-meta');
+    const tabs = document.getElementById('timetable-days');
+    const body = document.getElementById('timetable-body');
+    const empty = document.getElementById('timetable-empty');
+
+    // Day tabs are always available so the student can look ahead
+    tabs.innerHTML = WEEKDAYS.map(day => {
+        const relation = dayRelation(day.key);
+        return `<button class="day-tab ${day.key === dayKey ? 'active' : ''}" data-day="${day.key}">
+            ${day.short}${relation ? `<span class="day-tab-relation">${relation}</span>` : ''}
+        </button>`;
+    }).join('');
+    tabs.querySelectorAll('.day-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            appState.timetableDay = tab.dataset.day;
+            renderTimetable();
+        });
+    });
+
+    const week = activeTimetable();
+    if (!week) {
+        body.innerHTML = '';
+        empty.style.display = 'block';
+        empty.innerHTML = appState.stream
+            ? `<i class="fas fa-calendar-xmark"></i>
+               <h3>No timetable for Grade ${appState.grade}</h3>
+               <p>The app only has the 2026-2027 sheets for grades 5-11.</p>`
+            : `<i class="fas fa-code-branch"></i>
+               <h3>Which class are you in?</h3>
+               <p>Blue and Green follow different timetables — pick yours to see your lessons.</p>
+               <button id="btn-pick-stream" class="btn-primary">
+                   <i class="fas fa-user-edit"></i> Choose in Profile
+               </button>`;
+        const pick = document.getElementById('btn-pick-stream');
+        if (pick) pick.addEventListener('click', showProfileModal);
+        meta.textContent = '';
+        return;
+    }
+
+    empty.style.display = 'none';
+    meta.textContent = `Grade ${appState.grade} ${streamLabel(appState.stream)}`;
+
+    const lessons = week[dayKey] || [];
+    const relation = dayRelation(dayKey);
+    // Only highlight a lesson in progress while actually looking at today
+    const liveLesson = relation === 'Today' ? currentLessonNumber() : 0;
+
+    if (!lessons.length) {
+        body.innerHTML = `<div class="timetable-free"><i class="fas fa-mug-hot"></i> No lessons on
+            ${WEEKDAYS.find(d => d.key === dayKey).label}.</div>`;
+        return;
+    }
+
+    body.innerHTML = lessons.map((cell, index) => {
+        const slot = LESSON_TIMES[index];
+        const lesson = resolveTimetableCell(cell);
+        const breakAfter = LESSON_BREAKS[slot.n];
+        const breakRow = breakAfter && index < lessons.length - 1
+            ? `<div class="timetable-break"><span>${breakAfter}</span></div>` : '';
+
+        if (!lesson) {
+            return `<div class="timetable-row free">
+                <div class="lesson-slot"><span class="lesson-number">${slot.n}</span>
+                    <span class="lesson-time">${slot.start}</span></div>
+                <div class="lesson-body"><span class="lesson-name muted">Free period</span></div>
+            </div>${breakRow}`;
+        }
+
+        const detail = [lesson.room, lesson.teacher].filter(Boolean).join(' · ');
+        return `<div class="timetable-row ${slot.n === liveLesson ? 'now' : ''} ${lesson.subjectId ? 'clickable' : ''}"
+                     ${lesson.subjectId ? `data-subject="${lesson.subjectId}"` : ''}>
+            <div class="lesson-slot">
+                <span class="lesson-number">${slot.n}</span>
+                <span class="lesson-time">${slot.start} – ${slot.end}</span>
+            </div>
+            <div class="lesson-body">
+                <span class="lesson-icon"><i class="fas ${lesson.icon}"></i></span>
+                <div class="lesson-text">
+                    <span class="lesson-name">${lesson.name}</span>
+                    ${detail ? `<span class="lesson-detail">${detail}</span>` : ''}
+                </div>
+                ${lesson.block ? `<span class="lesson-block">${lesson.block}</span>` : ''}
+                ${slot.n === liveLesson ? '<span class="lesson-live">Now</span>' : ''}
+            </div>
+        </div>${breakRow}`;
+    }).join('');
+
+    body.querySelectorAll('.timetable-row.clickable').forEach(row => {
+        row.addEventListener('click', () => switchToSubject(row.dataset.subject));
+    });
+}
+
 // Export data as CSV — every period, one row per subject per period
 function exportData() {
     // Create CSV content
@@ -1981,6 +2184,7 @@ function showProfileModal() {
     // Populate form fields
     document.getElementById('student-name-input').value = appState.studentName;
     setSelectValue(document.getElementById('student-grade-input'), appState.grade);
+    setSelectValue(document.getElementById('student-stream-input'), appState.stream);
 
     // Electives apply to the upper grades only
     const electiveOptions = document.getElementById('elective-options');
@@ -2229,6 +2433,7 @@ function initApp() {
 
     // Set up event listeners
     document.getElementById('btn-dashboard').addEventListener('click', switchToDashboard);
+    document.getElementById('btn-timetable').addEventListener('click', switchToTimetable);
     document.getElementById('btn-history').addEventListener('click', switchToHistory);
     document.getElementById('btn-back').addEventListener('click', switchToDashboard);
     document.getElementById('btn-export').addEventListener('click', exportData);
@@ -2368,6 +2573,7 @@ function initApp() {
         const newGrade = document.getElementById('student-grade-input').value;
         const newOB = document.getElementById('elective-ob-input').value;
         const newOA = document.getElementById('elective-oa-input').value;
+        const newStream = document.getElementById('student-stream-input').value;
 
         // Validation
         if (!newName || !newGrade) {
@@ -2445,6 +2651,11 @@ function initApp() {
                 };
             });
         }
+
+        // Written after any period switch above, so it lands on the period the
+        // student is now actually looking at. Stream is optional — only the
+        // timetable needs it, and it prompts for one when it's still blank.
+        appState.stream = newStream;
 
         saveAllData();
 
