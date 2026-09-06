@@ -11,17 +11,9 @@
 //      enable Google as a sign-in provider.
 //   4. In the Firebase console: Build → Firestore Database → Create database
 //      (start in test mode for development).
-//   5. After things work, tighten Firestore rules to the following so each
-//      user can only read/write their own data:
-//
-//      rules_version = '2';
-//      service cloud.firestore {
-//        match /databases/{database}/documents {
-//          match /users/{uid}/{document=**} {
-//            allow read, write: if request.auth != null && request.auth.uid == uid;
-//          }
-//        }
-//      }
+//   5. Paste firestore.rules (in this repo) into Firebase console → Firestore
+//      Database → Rules → Publish. Do this before the 30-day test-mode window
+//      expires, or every read and write starts failing with permission-denied.
 //
 //   6. If serving via `file://`, Google sign-in won't work — run a local
 //      server (e.g. `npx serve`) and open http://localhost:3000.
@@ -69,6 +61,18 @@ function setStatus(text, kind) {
     if (!el) return;
     el.textContent = text;
     el.className = 'sync-status' + (kind ? ' ' + kind : '');
+}
+
+// Firestore's permission-denied reads as a generic failure in the console, but
+// it means one specific thing: the security rules reject the write. Test-mode
+// rules expire 30 days after the database is created, which is the usual cause.
+// Say so, rather than leaving "Sync error" to be guessed at.
+function describeSyncError(err) {
+    if (err && err.code === 'permission-denied') {
+        return 'Firestore rules are blocking this account. See firestore.rules in the repo — ' +
+               'paste it into Firebase console → Firestore Database → Rules → Publish.';
+    }
+    return err && err.message ? err.message : 'Cloud sync failed.';
 }
 
 function showSignedIn(user) {
@@ -301,7 +305,9 @@ if (!CONFIGURED) {
             setStatus('Synced ✓', 'synced');
         } catch (err) {
             console.error(err);
-            setStatus('Sync error', 'error');
+            const denied = err && err.code === 'permission-denied';
+            setStatus(denied ? 'Rules blocked' : 'Sync error', 'error');
+            if (window.showToast) window.showToast(describeSyncError(err), 'error');
         }
     }
 
@@ -372,7 +378,9 @@ if (!CONFIGURED) {
                     setStatus('Synced ✓', 'synced');
                 } catch (err) {
                     console.error(err);
-                    setStatus('Sync error', 'error');
+                    const denied = err && err.code === 'permission-denied';
+                    setStatus(denied ? 'Rules blocked' : 'Sync error', 'error');
+                    if (window.showToast) window.showToast(describeSyncError(err), 'error');
                 }
             }, 5000);
         };
