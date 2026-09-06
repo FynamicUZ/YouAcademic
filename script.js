@@ -1,12 +1,30 @@
-// Subject Configurations per Grade
+// Subject Configurations per Grade - mirrors the 2026-2027 timetable.
+// "Ks" (kurator soati / homeroom) is a form period, not a graded subject, so it
+// is deliberately absent. Grades 10-11 list the core only; the two elective
+// blocks are appended from ELECTIVE_OPTIONS once the student picks them.
 const GRADE_SUBJECTS = {
-    '5': ['science', 'art', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'music', 'literature', 'ce', 'pe'],
-    '6': ['science', 'art', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'music', 'literature', 'ce', 'pe'],
-    '7': ['science', 'art', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'music', 'literature', 'ce', 'pe', 'geography'],
-    '8': ['chemistry', 'biology', 'physics', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'literature', 'ce', 'pe', 'geography'],
-    '9': ['chemistry', 'biology', 'physics', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'literature', 'ce', 'pe'],
-    '10': ['english', 'russian', 'gp', 'math', 'uzbek', 'history', 'pe', 'literature', 'ce', 'mp'], // Plus electives (OA + OB)
-    '11': ['english', 'russian', 'gp', 'math', 'uzbek', 'history', 'pe', 'literature', 'ce', 'mp']  // Same core as Grade 10, plus electives
+    '5': ['science', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'music', 'literature', 'ce', 'pe', 'art', 'technology'],
+    '6': ['science', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'music', 'literature', 'ce', 'pe', 'art', 'technology'],
+    '7': ['science', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'music', 'literature', 'ce', 'pe', 'geography', 'drafting'],
+    '8': ['chemistry', 'biology', 'physics', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'literature', 'ce', 'pe', 'geography', 'law'],
+    '9': ['chemistry', 'biology', 'physics', 'cs', 'english', 'math', 'russian', 'gp', 'uzbek', 'history', 'literature', 'ce', 'pe', 'geography', 'law', 'economics'],
+    '10': ['english', 'russian', 'gp', 'math', 'uzbek', 'history', 'pe', 'literature', 'ce', 'mp', 'law'], // Plus electives (OB + OA)
+    '11': ['english', 'russian', 'gp', 'math', 'uzbek', 'history', 'pe', 'literature', 'ce', 'mp', 'law']  // Same core as Grade 10, plus electives
+};
+
+// The two elective blocks each upper grade runs, per the 2026-2027 timetable.
+// Grade 10 splits Chem/Phys/CS against Bio/Phys/CS; Grade 11 splits Phys/Bio/CS
+// against Chem/Eco/CS. The OA block's Computer Science uses the separate
+// 'computing' key so it can never collide with the OB block's 'cs'.
+const ELECTIVE_OPTIONS = {
+    '10': {
+        ob: ['biology', 'physics', 'cs'],
+        oa: ['chemistry', 'physics', 'computing']
+    },
+    '11': {
+        ob: ['physics', 'biology', 'cs'],
+        oa: ['chemistry', 'economics', 'computing']
+    }
 };
 
 // Grades where the student picks an OA and an OB elective on top of the core list
@@ -14,6 +32,27 @@ const ELECTIVE_GRADES = ['10', '11'];
 
 function hasElectives(grade) {
     return ELECTIVE_GRADES.includes(String(grade));
+}
+
+// Rebuild the OB/OA dropdowns from ELECTIVE_OPTIONS for the given grade, since
+// the two blocks differ between Grade 10 and Grade 11. A previously stored pick
+// is restored only if the new grade still offers it.
+function populateElectiveOptions(grade, ob = '', oa = '') {
+    const config = ELECTIVE_OPTIONS[String(grade)] || { ob: [], oa: [] };
+
+    const fill = (elementId, keys, placeholder, selected) => {
+        const select = document.getElementById(elementId);
+        if (!select) return;
+        select.innerHTML = `<option value="" disabled selected>${placeholder}</option>` +
+            keys.map(key => {
+                const detail = SUBJECT_DETAILS[key] || { name: key };
+                return `<option value="${key}">${detail.name}</option>`;
+            }).join('');
+        setSelectValue(select, keys.includes(selected) ? selected : '');
+    };
+
+    fill('elective-ob-input', config.ob, 'Select OB Subject', ob);
+    fill('elective-oa-input', config.oa, 'Select OA Subject', oa);
 }
 
 // Subject Details (Icons and Names)
@@ -32,11 +71,14 @@ const SUBJECT_DETAILS = {
     'ce': { name: 'Character Education', icon: 'fa-hands-helping' },
     'pe': { name: 'Physical Education', icon: 'fa-running' },
     'geography': { name: 'Geography', icon: 'fa-globe-europe' },
+    'technology': { name: 'Technology', icon: 'fa-tools' },
+    'drafting': { name: 'Technical Drawing', icon: 'fa-drafting-compass' },
+    'law': { name: 'Law', icon: 'fa-gavel' },
     'chemistry': { name: 'Chemistry', icon: 'fa-vial' },
     'biology': { name: 'Biology', icon: 'fa-dna' },
     'physics': { name: 'Physics', icon: 'fa-atom' },
     'economics': { name: 'Economics', icon: 'fa-chart-line' },
-    'computing': { name: 'Computing', icon: 'fa-desktop' },
+    'computing': { name: 'Computer Science (OA)', icon: 'fa-desktop' },
     'mp': { name: 'MP', icon: 'fa-users' }, // Assuming MP logic if needed later
     'ob': { name: 'OB', icon: 'fa-microscope' },
     'oa': { name: 'OA', icon: 'fa-flask' }
@@ -325,8 +367,7 @@ function checkProfileStatus() {
         setSelectValue(document.getElementById('student-grade-input'), appState.grade);
         if (hasElectives(appState.grade)) {
             document.getElementById('elective-options').style.display = 'block';
-            setSelectValue(document.getElementById('elective-ob-input'), appState.electiveOB);
-            setSelectValue(document.getElementById('elective-oa-input'), appState.electiveOA);
+            populateElectiveOptions(appState.grade, appState.electiveOB, appState.electiveOA);
         }
 
         // Disable closing
@@ -1912,12 +1953,10 @@ function showProfileModal() {
     const electiveOptions = document.getElementById('elective-options');
     if (hasElectives(appState.grade)) {
         electiveOptions.style.display = 'block';
-        setSelectValue(document.getElementById('elective-ob-input'), appState.electiveOB);
-        setSelectValue(document.getElementById('elective-oa-input'), appState.electiveOA);
+        populateElectiveOptions(appState.grade, appState.electiveOB, appState.electiveOA);
     } else {
         electiveOptions.style.display = 'none';
-        setSelectValue(document.getElementById('elective-ob-input'), '');
-        setSelectValue(document.getElementById('elective-oa-input'), '');
+        populateElectiveOptions('', '', '');
     }
 
     // Reset new subject form
@@ -1938,7 +1977,7 @@ function showProfileModal() {
 
     appState.subjects.forEach((subject, index) => {
         const isDefault = ['english', 'russian', 'uzbek', 'cs', 'chemistry', 'biology',
-            'physics', 'math', 'uzbek-lit', 'history', 'geography', 'pe', 'ce', 'gp',
+            'physics', 'math', 'uzbek-lit', 'history', 'pe', 'ce', 'gp',
             'economics', 'computing', 'ob', 'oa'] // Added electives to default list
             .includes(subject.id);
 
@@ -2296,6 +2335,13 @@ function initApp() {
             return;
         }
 
+        // Physics sits in both Grade 10 blocks, so the same subject could be
+        // picked twice and collapse into a single tracked subject.
+        if (hasElectives(newGrade) && newOB === newOA) {
+            showToast('Please pick two different elective subjects', 'error');
+            return;
+        }
+
         const wasUnset = !appState.activePeriod;
         const gradeChanged = newGrade !== appState.grade;
         const electivesChanged = hasElectives(newGrade) &&
@@ -2373,8 +2419,10 @@ function initApp() {
 
     // Grade selection change — show the elective pickers only for the upper grades
     document.getElementById('student-grade-input').addEventListener('change', function () {
-        document.getElementById('elective-options').style.display =
-            hasElectives(this.value) ? 'block' : 'none';
+        const showElectives = hasElectives(this.value);
+        document.getElementById('elective-options').style.display = showElectives ? 'block' : 'none';
+        // Grade 10 and Grade 11 run different blocks, so refill on every change
+        populateElectiveOptions(showElectives ? this.value : '', appState.electiveOB, appState.electiveOA);
     });
 
     // Add subject button
