@@ -2705,3 +2705,10 @@ select:not([data-enhanced]) {
         padding-right: 4px;
     }
 }
+
+/* Quick-nav block above the subject list */
+.sidebar-quicknav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
