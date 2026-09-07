@@ -2683,3 +2683,25 @@ select:not([data-enhanced]) {
         overflow-y: auto;
     }
 }
+
+/* The subject list is the only sidebar section that grows without bound, so on
+   desktop it scrolls inside its own box instead of pushing the nav buttons
+   below the fold, where they read as missing rather than scrolled past. It
+   keeps a floor so it never collapses to nothing on a short viewport; if even
+   that does not fit, the sidebar still scrolls as it always did. The mobile
+   drawer is left alone. */
+@media (min-width: 993px) {
+    .sidebar-subjects {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 188px;
+    }
+
+    #subject-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+}
