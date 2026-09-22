@@ -121,16 +121,21 @@
                 <button id="btn-history" class="sidebar-btn">
                     <i class="fas fa-timeline"></i> History
                 </button>
-                <button id="btn-export" class="sidebar-btn">
-                    <i class="fas fa-file-excel"></i> Export CSV
-                </button>
-                <button id="btn-import-csv" class="sidebar-btn">
-                    <i class="fas fa-file-import"></i> Import CSV
-                </button>
+
+                <!-- Data tools share one row: they are used rarely, and as full
+                     width buttons they pushed the footer off the screen -->
+                <div class="sidebar-utility">
+                    <button id="btn-export" class="sidebar-btn" title="Export CSV" aria-label="Export CSV">
+                        <i class="fas fa-file-excel"></i>
+                    </button>
+                    <button id="btn-import-csv" class="sidebar-btn" title="Import CSV" aria-label="Import CSV">
+                        <i class="fas fa-file-import"></i>
+                    </button>
+                    <button id="btn-reset" class="sidebar-btn danger" title="Reset all data" aria-label="Reset all data">
+                        <i class="fas fa-redo"></i>
+                    </button>
+                </div>
                 <input type="file" id="import-csv-input" accept=".csv" style="display:none">
-                <button id="btn-reset" class="sidebar-btn">
-                    <i class="fas fa-redo"></i> Reset All
-                </button>
             </div>
 
             <div class="sidebar-footer">

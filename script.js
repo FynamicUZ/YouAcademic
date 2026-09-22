@@ -596,19 +596,19 @@ function getGradeFilterCategory(value, grade) {
 }
 
 /* ============================================================
-   GPA — two 4.0-scale methods, both credit-weighted
+   GPA - two 4.0-scale methods, both credit-weighted
    ============================================================
    Both use the standard quality-point formula:
 
-       GPA = Σ(grade points × credits) / Σ(credits)
+       GPA = sum(grade points x credits) / sum(credits)
 
    They differ only in how a percentage becomes grade points:
 
-   • "school"  — the school's own thresholds decide the mark (5/4/3/2),
+   - "school"  - the school's own thresholds decide the mark (5/4/3/2),
                  then the mark maps to 4.0/3.0/2.0/0.0. Where the
                  percentage sits inside its band adds the ± step, so 98%
                  and 86% are not both a flat 4.0.
-   • "us"      — the standard US letter table applied straight to the
+   - "us"      - the standard US letter table applied straight to the
                  percentage, ignoring the local thresholds.
 
    Credits are the subject's weekly lesson count from the printed
@@ -750,19 +750,6 @@ function calculateGPA(method, record) {
     };
 }
 
-// The period record for the period currently on screen, shaped the way
-// calculateGPA wants it (history periods already have this shape).
-function activePeriodRecord() {
-    return {
-        grade: appState.grade,
-        stream: appState.stream,
-        electiveOB: appState.electiveOB,
-        electiveOA: appState.electiveOA,
-        subjects: appState.subjects,
-        grades: appState.grades
-    };
-}
-
 // Validate grade input
 function validateGradeInput(value) {
     if (value === '') return '';
@@ -894,6 +881,65 @@ function renderSidebar() {
         li.addEventListener('click', () => switchToSubject(subject.id));
         subjectList.appendChild(li);
     });
+
+    sizeSubjectList();
+}
+
+// Tallest the resting subject list is allowed to get before it scrolls
+const SUBJECT_LIST_REST_MAX = 184;
+// Never shrink the resting list below this: a header with nothing under it
+// reads as a bug rather than as a collapsed list
+const SUBJECT_LIST_REST_MIN = 78;
+// Height of the "Subjects" row above the list (32px button + 8px margin)
+const SUBJECT_SECTION_HEADER = 40;
+// Below this the sidebar is a full-height drawer and sizes itself
+const SIDEBAR_DESKTOP_MIN_WIDTH = 993;
+
+// On desktop the list is absolutely positioned so it can grow upwards on
+// hover, which means it can no longer size its own box. Measure what was
+// rendered and hand the height to CSS.
+//
+// The resting height is the smallest of three things: what the items actually
+// need, a fixed cap, and the room the other sidebar blocks leave behind. That
+// last one is what keeps the nav buttons and the footer on screen instead of
+// scrolled off the bottom — the whole list is still one hover away.
+function sizeSubjectList() {
+    const section = document.querySelector('.sidebar-subjects');
+    const list = document.getElementById('subject-list');
+    if (!section || !list) return;
+
+    const previous = list.style.height;
+    list.style.height = 'auto';
+    const content = list.scrollHeight;
+    list.style.height = previous;
+
+    let height = Math.min(content, SUBJECT_LIST_REST_MAX);
+
+    const sidebar = section.closest('.sidebar');
+    if (sidebar && window.innerWidth >= SIDEBAR_DESKTOP_MIN_WIDTH) {
+        height = Math.min(height, Math.max(0, sidebarRoomForSubjects(sidebar, section)));
+        // On a short viewport there may be no room at all. Show a couple of
+        // items anyway and let the sidebar scroll, as it did before.
+        height = Math.max(height, Math.min(content, SUBJECT_LIST_REST_MIN));
+    }
+
+    section.style.setProperty('--subject-list-h', height + 'px');
+    // Only fade the bottom edge when there is actually more below it
+    section.classList.toggle('is-clipped', content > height);
+}
+
+// Vertical space left in the sidebar once every other block has taken its own
+function sidebarRoomForSubjects(sidebar, section) {
+    const children = [...sidebar.children];
+    const used = children.reduce((total, child) =>
+        child === section ? total : total + child.getBoundingClientRect().height, 0);
+
+    const styles = getComputedStyle(sidebar);
+    const gap = parseFloat(styles.rowGap) || 0;
+    const padding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+
+    return sidebar.clientHeight - used - gap * (children.length - 1)
+        - padding - SUBJECT_SECTION_HEADER;
 }
 
 // Show exactly one view and light up the matching sidebar button
@@ -1358,20 +1404,21 @@ function escapeHtml(value) {
 // How each method is described at the top of its breakdown
 const GPA_METHOD_INFO = {
     school: {
-        title: 'GPA — school scale',
+        title: 'GPA - school scale',
         method: "Your school's own thresholds decide the mark, then the mark maps onto " +
             '4.0: a 5 is an A (4.0), a 4 is a B (3.0), a 3 is a C (2.0), a 2 is an F (0.0). ' +
-            'Where the percentage sits inside its band adds the ± step (bottom third ' +
-            '− 0.3, top third + 0.3), so 98% and 86% are not both a flat 4.0. This is ' +
+            'Where the percentage sits inside its band adds the +/- step (bottom ' +
+            'third -0.3, top third +0.3), so 98% and 86% are not both a flat 4.0. ' +
+            'This is ' +
             'the GPA the history chart plots.'
     },
     us: {
-        title: 'GPA — US standard scale',
+        title: 'GPA - US standard scale',
         method: 'The standard US letter table applied straight to the percentage, ignoring ' +
-            'the local thresholds: 93+ = A (4.0), 90–92 = A− (3.7), 87–89 = ' +
-            'B+ (3.3), 83–86 = B (3.0), 80–82 = B− (2.7), 77–79 = C+ ' +
-            '(2.3), 73–76 = C (2.0), 70–72 = C− (1.7), 67–69 = D+ ' +
-            '(1.3), 65–66 = D (1.0), below 65 = F (0.0).'
+            'the local thresholds: 93+ = A (4.0), 90-92 = A- (3.7), 87-89 = ' +
+            'B+ (3.3), 83-86 = B (3.0), 80-82 = B- (2.7), 77-79 = C+ (2.3), ' +
+            '73-76 = C (2.0), 70-72 = C- (1.7), 67-69 = D+ (1.3), 65-66 = D ' +
+            '(1.0), below 65 = F (0.0).'
     }
 };
 
@@ -1403,9 +1450,9 @@ function showGPAInfo(method) {
     const formula = document.getElementById('gpa-info-formula');
     if (result.totalCredits > 0) {
         formula.innerHTML = `
-            <div class="gpa-formula-line">GPA = total quality points ÷ total credits</div>
+            <div class="gpa-formula-line">GPA = total quality points &divide; total credits</div>
             <div class="gpa-formula-math">
-                ${result.qualityPoints} ÷ ${result.totalCredits} =
+                ${result.qualityPoints} &divide; ${result.totalCredits} =
                 <strong>${result.gpa.toFixed(2)}</strong> / 4.00
             </div>`;
     } else {
@@ -3141,6 +3188,16 @@ function setSelectValue(el, value) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 window.setSelectValue = setSelectValue;
+
+// Icon fonts arrive after first paint and change the height of every item
+window.addEventListener('load', () => sizeSubjectList());
+
+// The room the sidebar can spare changes with the viewport, so re-measure
+let subjectListResizeTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(subjectListResizeTimer);
+    subjectListResizeTimer = setTimeout(sizeSubjectList, 120);
+});
 
 function enhanceAllSelects() {
     document.querySelectorAll('select').forEach(enhanceSelect);
