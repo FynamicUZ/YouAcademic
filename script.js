@@ -595,6 +595,174 @@ function getGradeFilterCategory(value, grade) {
     return 'poor';
 }
 
+/* ============================================================
+   GPA — two 4.0-scale methods, both credit-weighted
+   ============================================================
+   Both use the standard quality-point formula:
+
+       GPA = Σ(grade points × credits) / Σ(credits)
+
+   They differ only in how a percentage becomes grade points:
+
+   • "school"  — the school's own thresholds decide the mark (5/4/3/2),
+                 then the mark maps to 4.0/3.0/2.0/0.0. Where the
+                 percentage sits inside its band adds the ± step, so 98%
+                 and 86% are not both a flat 4.0.
+   • "us"      — the standard US letter table applied straight to the
+                 percentage, ignoring the local thresholds.
+
+   Credits are the subject's weekly lesson count from the printed
+   timetable (contact hours), which is how credit hours are defined.
+*/
+
+// Standard US percentage → letter → 4.0 points table
+const US_GRADE_SCALE = [
+    { min: 97, letter: 'A+', points: 4.0 },
+    { min: 93, letter: 'A',  points: 4.0 },
+    { min: 90, letter: 'A-', points: 3.7 },
+    { min: 87, letter: 'B+', points: 3.3 },
+    { min: 83, letter: 'B',  points: 3.0 },
+    { min: 80, letter: 'B-', points: 2.7 },
+    { min: 77, letter: 'C+', points: 2.3 },
+    { min: 73, letter: 'C',  points: 2.0 },
+    { min: 70, letter: 'C-', points: 1.7 },
+    { min: 67, letter: 'D+', points: 1.3 },
+    { min: 65, letter: 'D',  points: 1.0 },
+    { min: 0,  letter: 'F',  points: 0.0 }
+];
+
+// Base points for each local mark, and the letter each maps onto
+const SCHOOL_MARK_POINTS = {
+    '5': { points: 4.0, letter: 'A' },
+    '4': { points: 3.0, letter: 'B' },
+    '3': { points: 2.0, letter: 'C' },
+    '2': { points: 0.0, letter: 'F' }
+};
+
+// Subjects with no timetable slot still have to count for something
+const DEFAULT_CREDIT = 1;
+
+// US method: percentage straight into the standard table
+function usGradePoints(percentage) {
+    const row = US_GRADE_SCALE.find(r => percentage >= r.min) ||
+        US_GRADE_SCALE[US_GRADE_SCALE.length - 1];
+    return { points: row.points, letter: row.letter };
+}
+
+// School method: the local mark sets the base, position inside the band
+// sets the ± step. The failing band has no ± — an F is an F.
+function schoolGradePoints(percentage, grade) {
+    const thresholds = getThresholds(grade);
+    const mark = getFinalGrade(percentage, grade);
+    const base = SCHOOL_MARK_POINTS[mark];
+    if (!base) return { points: 0, letter: '-' };
+    if (mark === '2') return { points: 0, letter: 'F' };
+
+    // Band the percentage falls in, so we can find its position within it
+    const bands = {
+        '5': [thresholds['5'], 100],
+        '4': [thresholds['4'], thresholds['5']],
+        '3': [thresholds['3'], thresholds['4']]
+    };
+    const [low, high] = bands[mark];
+    const position = high > low ? (percentage - low) / (high - low) : 0.5;
+
+    // Bottom third is a minus, top third a plus, capped at 4.0
+    let points = base.points;
+    let letter = base.letter;
+    if (position < 1 / 3) {
+        points = base.points - 0.3;
+        letter = base.letter + '-';
+    } else if (position >= 2 / 3 && base.points < 4.0) {
+        points = base.points + 0.3;
+        letter = base.letter + '+';
+    }
+
+    return { points: Math.round(points * 10) / 10, letter };
+}
+
+// Weekly lesson count per subject key, read off the printed timetable.
+// Elective blocks ('@ob' / '@oa') resolve to whichever subject was picked,
+// so an elective earns the credits of the slots it actually occupies.
+function timetableCredits(grade, stream, ob, oa) {
+    const credits = {};
+    const byGrade = TIMETABLES[String(grade)];
+    const week = byGrade && stream ? byGrade[stream] : null;
+    if (!week) return credits;
+
+    WEEKDAYS.forEach(day => {
+        (week[day.key] || []).forEach(cell => {
+            if (!cell) return;
+            let key = cell[0];
+            if (key === '@ob') key = ob;
+            else if (key === '@oa') key = oa;
+            if (!key || !SUBJECT_DETAILS[key]) return;
+            credits[key] = (credits[key] || 0) + 1;
+        });
+    });
+
+    return credits;
+}
+
+// Credits for one period's subjects, falling back to 1 where the timetable
+// has nothing to say (custom subjects, or no stream chosen yet).
+function creditsForPeriod(record) {
+    const map = timetableCredits(record.grade, record.stream, record.electiveOB, record.electiveOA);
+    const out = {};
+    record.subjects.forEach(subject => {
+        out[subject.id] = map[subject.id] || DEFAULT_CREDIT;
+    });
+    return out;
+}
+
+// Grade points for one percentage under the named method
+function gradePointsFor(method, percentage, grade) {
+    return method === 'us' ? usGradePoints(percentage) : schoolGradePoints(percentage, grade);
+}
+
+// Full credit-weighted GPA for a period, plus the per-subject rows the info
+// panel shows so the number can always be checked by hand.
+function calculateGPA(method, record) {
+    const credits = creditsForPeriod(record);
+    const rows = [];
+    let qualityPoints = 0;
+    let totalCredits = 0;
+
+    record.subjects.forEach(subject => {
+        const grades = record.grades[subject.id];
+        if (!grades || grades.finalPercentage <= 0) return;
+
+        const percentage = grades.finalPercentage;
+        const credit = credits[subject.id];
+        const { points, letter } = gradePointsFor(method, percentage, record.grade);
+        const quality = points * credit;
+
+        qualityPoints += quality;
+        totalCredits += credit;
+        rows.push({ name: subject.name, percentage, letter, points, credit, quality });
+    });
+
+    return {
+        gpa: totalCredits > 0 ? Math.round((qualityPoints / totalCredits) * 100) / 100 : 0,
+        qualityPoints: Math.round(qualityPoints * 100) / 100,
+        totalCredits,
+        rows
+    };
+}
+
+// The period record for the period currently on screen, shaped the way
+// calculateGPA wants it (history periods already have this shape).
+function activePeriodRecord() {
+    return {
+        grade: appState.grade,
+        stream: appState.stream,
+        electiveOB: appState.electiveOB,
+        electiveOA: appState.electiveOA,
+        subjects: appState.subjects,
+        grades: appState.grades
+    };
+}
+
 // Validate grade input
 function validateGradeInput(value) {
     if (value === '') return '';
@@ -1180,6 +1348,73 @@ function renderPerformanceChart(subjectId, grades) {
     });
 }
 
+// Subject names are user-entered, so they are escaped before going into HTML
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+}
+
+// How each method is described at the top of its breakdown
+const GPA_METHOD_INFO = {
+    school: {
+        title: 'GPA — school scale',
+        method: "Your school's own thresholds decide the mark, then the mark maps onto " +
+            '4.0: a 5 is an A (4.0), a 4 is a B (3.0), a 3 is a C (2.0), a 2 is an F (0.0). ' +
+            'Where the percentage sits inside its band adds the ± step (bottom third ' +
+            '− 0.3, top third + 0.3), so 98% and 86% are not both a flat 4.0. This is ' +
+            'the GPA the history chart plots.'
+    },
+    us: {
+        title: 'GPA — US standard scale',
+        method: 'The standard US letter table applied straight to the percentage, ignoring ' +
+            'the local thresholds: 93+ = A (4.0), 90–92 = A− (3.7), 87–89 = ' +
+            'B+ (3.3), 83–86 = B (3.0), 80–82 = B− (2.7), 77–79 = C+ ' +
+            '(2.3), 73–76 = C (2.0), 70–72 = C− (1.7), 67–69 = D+ ' +
+            '(1.3), 65–66 = D (1.0), below 65 = F (0.0).'
+    }
+};
+
+// Fill and open the breakdown for whichever GPA card was clicked
+function showGPAInfo(method) {
+    const info = GPA_METHOD_INFO[method] || GPA_METHOD_INFO.school;
+    const result = calculateGPA(method, activePeriodRecord());
+
+    document.getElementById('gpa-info-title').textContent = info.title;
+    document.getElementById('gpa-info-method').textContent = info.method;
+
+    const tbody = document.getElementById('gpa-info-rows');
+    if (result.rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="gpa-info-empty">' +
+            'No graded subjects in this period yet.</td></tr>';
+    } else {
+        tbody.innerHTML = result.rows.map(row => `
+            <tr>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${row.percentage}%</td>
+                <td><span class="gpa-letter">${row.letter}</span></td>
+                <td>${row.points.toFixed(1)}</td>
+                <td>${row.credit}</td>
+                <td>${row.quality.toFixed(1)}</td>
+            </tr>
+        `).join('');
+    }
+
+    const formula = document.getElementById('gpa-info-formula');
+    if (result.totalCredits > 0) {
+        formula.innerHTML = `
+            <div class="gpa-formula-line">GPA = total quality points ÷ total credits</div>
+            <div class="gpa-formula-math">
+                ${result.qualityPoints} ÷ ${result.totalCredits} =
+                <strong>${result.gpa.toFixed(2)}</strong> / 4.00
+            </div>`;
+    } else {
+        formula.innerHTML = '<div class="gpa-formula-line">Nothing to average yet.</div>';
+    }
+
+    document.getElementById('gpa-info-modal').classList.add('active');
+}
+
 // Render dashboard
 function renderDashboard() {
     updateDashboardStats();
@@ -1219,23 +1454,11 @@ function updateDashboardStats() {
 
     const overallAverage = subjectCount > 0 ? Math.round(totalPercentage / subjectCount) : 0;
 
-    // Calculate GPA
-    // Assuming grades 5, 4, 3, 2 mapped directly to numbers
-    let totalGradePoints = 0;
-    let gpaSubjectCount = 0;
-
-    appState.subjects.forEach(subject => {
-        const grades = appState.grades[subject.id];
-        if (grades && grades.finalPercentage > 0) {
-            const gradeNum = parseInt(grades.finalGrade);
-            if (!isNaN(gradeNum)) {
-                totalGradePoints += gradeNum;
-                gpaSubjectCount++;
-            }
-        }
-    });
-
-    const gpa = gpaSubjectCount > 0 ? (totalGradePoints / gpaSubjectCount).toFixed(2) : '0.0';
+    // Both GPAs run on the same credit-weighted formula and differ only in how
+    // a percentage becomes grade points. See the GPA module above.
+    const record = activePeriodRecord();
+    const schoolGPA = calculateGPA('school', record);
+    const usGPA = calculateGPA('us', record);
 
     // Update UI
     document.getElementById('overall-average').textContent = `${overallAverage}%`;
@@ -1245,9 +1468,11 @@ function updateDashboardStats() {
     document.getElementById('weak-grade').textContent = `${weakSubject.percentage}%`;
     document.getElementById('total-average').textContent = `${overallAverage}%`;
 
-    // Update GPA
+    // Update both GPAs
     const gpaEl = document.getElementById('gpa-value');
-    if (gpaEl) gpaEl.textContent = gpa;
+    if (gpaEl) gpaEl.textContent = schoolGPA.gpa.toFixed(2);
+    const gpaUsEl = document.getElementById('gpa-us-value');
+    if (gpaUsEl) gpaUsEl.textContent = usGPA.gpa.toFixed(2);
 
     // Update progress bar
     const progressFill = document.getElementById('overall-progress');
@@ -1402,27 +1627,26 @@ function periodShortLabel(key) {
 
 // Average final percentage and GPA for one period, judged by that period's own
 // grade thresholds (a 5th-grader's 82% is a "5"; a 9th-grader's 82% is a "4").
+// The GPA is the credit-weighted school-scale one, so the history line and the
+// dashboard card always report the same number for the same period.
 function periodStats(key) {
     const record = appState.periods[key];
-    if (!record) return { average: 0, gpa: 0, count: 0 };
+    if (!record) return { average: 0, gpa: 0, gpaUs: 0, count: 0 };
 
     let total = 0;
-    let points = 0;
     let count = 0;
 
     record.subjects.forEach(subject => {
         const grades = record.grades[subject.id];
         if (!grades || grades.finalPercentage <= 0) return;
-
         total += grades.finalPercentage;
-        const gradeNum = parseInt(getFinalGrade(grades.finalPercentage, record.grade));
-        if (!isNaN(gradeNum)) points += gradeNum;
         count++;
     });
 
     return {
         average: count > 0 ? Math.round(total / count) : 0,
-        gpa: count > 0 ? Math.round((points / count) * 100) / 100 : 0,
+        gpa: calculateGPA('school', record).gpa,
+        gpaUs: calculateGPA('us', record).gpa,
         count
     };
 }
@@ -1487,7 +1711,7 @@ function renderHistoryOverallChart(keys) {
                     yAxisID: 'y'
                 },
                 {
-                    label: 'GPA',
+                    label: 'GPA (/4)',
                     data: stats.map(s => s.gpa),
                     borderColor: '#f59e0b',
                     borderWidth: 2,
@@ -1515,7 +1739,7 @@ function renderHistoryOverallChart(keys) {
                 },
                 yGpa: {
                     position: 'right',
-                    beginAtZero: true, max: 5, min: 0,
+                    beginAtZero: true, max: 4, min: 0,
                     grid: { display: false },
                     ticks: { color: '#f59e0b', stepSize: 1 }
                 },
@@ -1534,7 +1758,7 @@ function renderHistoryOverallChart(keys) {
                         title: items => periodLabel(keys[items[0].dataIndex]),
                         label: ctxItem => ctxItem.datasetIndex === 0
                             ? `Average: ${ctxItem.parsed.y}%`
-                            : `GPA: ${ctxItem.parsed.y}`
+                            : `GPA: ${ctxItem.parsed.y.toFixed(2)} / 4.00`
                     }
                 }
             },
@@ -2512,6 +2736,14 @@ function initApp() {
             this.classList.add('active');
             appState.sortMode = this.dataset.sort;
             renderOverallChart();
+        });
+    });
+
+    // GPA breakdown buttons on the two GPA stat cards
+    document.querySelectorAll('[data-gpa-info]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showGPAInfo(btn.dataset.gpaInfo);
         });
     });
 

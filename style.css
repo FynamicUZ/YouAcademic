@@ -495,7 +495,7 @@ body {
 /* Stats Cards */
 .dashboard-stats {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 12px;
     margin-bottom: 12px;
     flex-shrink: 0;
@@ -550,6 +550,60 @@ body {
 
 .stat-card:nth-child(3) .stat-icon {
     background: linear-gradient(135deg, var(--warning-color), #f97316);
+}
+
+/* The two GPA cards share an icon colour so they read as one pair */
+.stat-card:nth-child(4) .stat-icon,
+.stat-card:nth-child(5) .stat-icon {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+}
+
+/* Scale qualifier under the GPA heading */
+.stat-content h3 small {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    opacity: 0.75;
+    text-transform: uppercase;
+}
+
+/* Small "how was this worked out?" button in the corner of a stat card */
+.stat-info-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.55rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    z-index: 2;
+}
+
+.stat-info-btn:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
+.stat-info-btn:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Leave room for the info button so the value never runs under it */
+.stat-card:has(.stat-info-btn) .stat-content {
+    padding-right: 16px;
 }
 
 .stat-content h3 {
@@ -2685,24 +2739,76 @@ select:not([data-enhanced]) {
 }
 
 /* The subject list is the only sidebar section that grows without bound, so on
-   desktop it scrolls inside its own box instead of pushing the nav buttons
-   below the fold, where they read as missing rather than scrolled past. It
-   keeps a floor so it never collapses to nothing on a short viewport; if even
-   that does not fit, the sidebar still scrolls as it always did. The mobile
-   drawer is left alone. */
+   desktop it lives in a fixed-height box instead of pushing the nav buttons
+   below the fold, where they read as missing rather than scrolled past.
+
+   At rest that box is deliberately short. Hovering it turns the list into a
+   panel anchored to its own bottom edge, so it grows UPWARDS over the profile
+   block rather than shoving the nav buttons down, and the whole list is
+   readable without scrolling a cramped strip. The mobile drawer is left
+   alone — there the sidebar is a full-height drawer already. */
 @media (min-width: 993px) {
     .sidebar-subjects {
         display: flex;
         flex-direction: column;
-        flex: 1 1 auto;
-        min-height: 188px;
+        flex: 0 0 auto;
+        height: 224px;
+        position: relative;
+    }
+
+    .sidebar-subjects .section-header {
+        flex: 0 0 auto;
     }
 
     #subject-list {
-        flex: 1;
-        min-height: 0;
+        /* Anchored to the bottom of its box so only `height` ever changes,
+           which is what makes the expansion animate instead of snapping.
+           184px = the 224px box minus the 40px header (32px button + 8px). */
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 184px;
         overflow-y: auto;
+        overflow-x: hidden; /* the items slide right on hover; don't scroll for it */
         padding-right: 4px;
+        border-radius: var(--radius-sm);
+        transition: height 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                    box-shadow 0.22s ease,
+                    padding 0.22s ease;
+    }
+
+    /* Expanded panel: bottom stays put, the top edge rises */
+    .sidebar-subjects:hover #subject-list,
+    .sidebar-subjects:focus-within #subject-list {
+        /* Capped so the panel's top edge stays inside the sidebar: the blocks
+           above it are a fixed ~300px tall and do not scale with the viewport. */
+        height: min(500px, calc(100vh - 140px));
+        z-index: 20;
+        padding: 6px 8px 6px 6px;
+        background: var(--bg-card);
+        border: 1px solid var(--primary-color);
+        box-shadow: var(--shadow-lg);
+    }
+
+    /* Hint that the short list has more in it */
+    .sidebar-subjects::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 4px;
+        bottom: 0;
+        height: 24px;
+        pointer-events: none;
+        border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+        background: linear-gradient(to bottom, transparent, var(--bg-card));
+        opacity: 0.9;
+        transition: opacity 0.2s ease;
+    }
+
+    .sidebar-subjects:hover::after,
+    .sidebar-subjects:focus-within::after {
+        opacity: 0;
     }
 }
 
@@ -2711,4 +2817,186 @@ select:not([data-enhanced]) {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+
+/* =====================================================================
+   GPA breakdown modal — the working behind whichever GPA card was clicked
+   ===================================================================== */
+.gpa-info-method {
+    margin-bottom: 14px;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+
+/* Only scrolls when the subject list genuinely outgrows the modal */
+.gpa-info-table-wrap {
+    max-height: 46vh;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+}
+
+.gpa-info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.gpa-info-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 10px;
+    text-align: right;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.gpa-info-table th:first-child,
+.gpa-info-table td:first-child {
+    text-align: left;
+}
+
+.gpa-info-table td {
+    padding: 7px 10px;
+    text-align: right;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.gpa-info-table tr:last-child td {
+    border-bottom: none;
+}
+
+.gpa-letter {
+    display: inline-block;
+    min-width: 30px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.78rem;
+    color: var(--primary-color);
+    background: rgba(99, 102, 241, 0.14);
+}
+
+.gpa-info-empty {
+    text-align: center !important;
+    padding: 18px !important;
+    color: var(--text-secondary);
+}
+
+.gpa-info-formula {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.gpa-formula-line {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.gpa-formula-math {
+    margin-top: 6px;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+}
+
+.gpa-formula-math strong {
+    font-size: 1.35rem;
+    color: var(--primary-color);
+}
+
+.gpa-info-note {
+    margin-top: 12px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+/* =====================================================================
+   Scrollbars — keep them off containers whose content already fits
+   ===================================================================== */
+
+/* Day tabs fit on a desktop sidebar-width row, so they wrapped a horizontal
+   scrollbar under themselves for nothing. Only narrow screens need to scroll. */
+@media (min-width: 769px) {
+    .timetable-days {
+        overflow-x: visible;
+        flex-wrap: wrap;
+        padding-bottom: 0;
+    }
+}
+
+/* Where a scrollbar IS warranted, make it thin and quiet rather than a
+   full-width system bar eating the layout. */
+.sidebar,
+#subject-list,
+.modal-content,
+.manage-subjects,
+.custom-select-options,
+.gpa-info-table-wrap,
+.timetable-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.sidebar::-webkit-scrollbar,
+#subject-list::-webkit-scrollbar,
+.modal-content::-webkit-scrollbar,
+.manage-subjects::-webkit-scrollbar,
+.custom-select-options::-webkit-scrollbar,
+.gpa-info-table-wrap::-webkit-scrollbar,
+.timetable-list::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+#subject-list::-webkit-scrollbar-track,
+.modal-content::-webkit-scrollbar-track,
+.manage-subjects::-webkit-scrollbar-track,
+.custom-select-options::-webkit-scrollbar-track,
+.gpa-info-table-wrap::-webkit-scrollbar-track,
+.timetable-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+#subject-list::-webkit-scrollbar-thumb,
+.modal-content::-webkit-scrollbar-thumb,
+.manage-subjects::-webkit-scrollbar-thumb,
+.custom-select-options::-webkit-scrollbar-thumb,
+.gpa-info-table-wrap::-webkit-scrollbar-thumb,
+.timetable-list::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 999px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+#subject-list::-webkit-scrollbar-thumb:hover,
+.modal-content::-webkit-scrollbar-thumb:hover,
+.manage-subjects::-webkit-scrollbar-thumb:hover,
+.custom-select-options::-webkit-scrollbar-thumb:hover,
+.gpa-info-table-wrap::-webkit-scrollbar-thumb:hover,
+.timetable-list::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Five stat cards do not fit across a narrowed desktop, so they go 3 + 2.
+   Bounded below so it cannot override the 2-column tablet rule above. */
+@media (min-width: 769px) and (max-width: 1200px) {
+    .dashboard-stats {
+        grid-template-columns: repeat(3, 1fr);
+    }
 }

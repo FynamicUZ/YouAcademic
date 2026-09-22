@@ -187,12 +187,30 @@
                     </div>
 
                     <div class="stat-card slide-up" style="animation-delay: 0.3s">
+                        <button class="stat-info-btn" data-gpa-info="school"
+                                aria-label="How the school-scale GPA is calculated">
+                            <i class="fas fa-info"></i>
+                        </button>
                         <div class="stat-icon">
                             <i class="fas fa-graduation-cap"></i>
                         </div>
                         <div class="stat-content">
-                            <h3>GPA</h3>
-                            <p class="stat-value" id="gpa-value">0.0</p>
+                            <h3>GPA <small>school scale</small></h3>
+                            <p class="stat-value" id="gpa-value">0.00</p>
+                        </div>
+                    </div>
+
+                    <div class="stat-card slide-up" style="animation-delay: 0.4s">
+                        <button class="stat-info-btn" data-gpa-info="us"
+                                aria-label="How the US-scale GPA is calculated">
+                            <i class="fas fa-info"></i>
+                        </button>
+                        <div class="stat-icon">
+                            <i class="fas fa-award"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3>GPA <small>US standard</small></h3>
+                            <p class="stat-value" id="gpa-us-value">0.00</p>
                         </div>
                     </div>
                 </div>
@@ -533,6 +551,41 @@
     </div>
 
     <!-- Custom Confirmation Modal -->
+    <!-- GPA breakdown: shows the exact rows behind whichever GPA was clicked -->
+    <div id="gpa-info-modal" class="modal">
+        <div class="modal-content" style="max-width: 640px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-calculator"></i> <span id="gpa-info-title">GPA</span></h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="gpa-info-method" id="gpa-info-method"></p>
+                <div class="gpa-info-table-wrap">
+                    <table class="gpa-info-table">
+                        <thead>
+                            <tr>
+                                <th>Subject</th>
+                                <th>%</th>
+                                <th>Grade</th>
+                                <th>Points</th>
+                                <th>Credits</th>
+                                <th>Quality</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gpa-info-rows"></tbody>
+                    </table>
+                </div>
+                <div class="gpa-info-formula" id="gpa-info-formula"></div>
+                <p class="gpa-info-note">
+                    <i class="fas fa-info-circle"></i>
+                    Credits are each subject's weekly lesson count from the timetable, the
+                    same way contact hours define credit hours. Subjects with no timetable
+                    slot count as 1.
+                </p>
+            </div>
+        </div>
+    </div>
+
     <div id="custom-confirm-modal" class="modal">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
