@@ -143,7 +143,7 @@ const appState = {
     activePeriod: '',     // e.g. '10-2'
     anchorGrade: '',      // The grade the student was in during anchorYearStart
     anchorYearStart: 0,   // Calendar year the anchor academic year began (e.g. 2025 => 2025–2026)
-    rolloverDismissedFor: '', // Period key the user declined to roll over into
+    rolloverDismissedFor: '', // Period key the rollover prompt has been answered for
     periods: {}
 };
 
@@ -1972,7 +1972,7 @@ function renderHistoryOverallChart(keys) {
                     yAxisID: 'y'
                 },
                 {
-                    label: 'GPA (/4)',
+                    label: 'GPA · school',
                     data: stats.map(s => s.gpa),
                     borderColor: '#f59e0b',
                     borderWidth: 2,
@@ -1981,6 +1981,21 @@ function renderHistoryOverallChart(keys) {
                     pointRadius: 4,
                     pointHoverRadius: 7,
                     pointBackgroundColor: '#f59e0b',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    fill: false,
+                    yAxisID: 'yGpa'
+                },
+                {
+                    label: 'GPA · US',
+                    data: stats.map(s => s.gpaUs),
+                    borderColor: '#8b5cf6',
+                    borderWidth: 2,
+                    borderDash: [2, 4],
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 7,
+                    pointBackgroundColor: '#8b5cf6',
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
                     fill: false,
@@ -2019,7 +2034,7 @@ function renderHistoryOverallChart(keys) {
                         title: items => periodLabel(keys[items[0].dataIndex]),
                         label: ctxItem => ctxItem.datasetIndex === 0
                             ? `Average: ${ctxItem.parsed.y}%`
-                            : `GPA: ${ctxItem.parsed.y.toFixed(2)} / 4.00`
+                            : `${ctxItem.dataset.label}: ${ctxItem.parsed.y.toFixed(2)} / 4.00`
                     }
                 }
             },
@@ -3066,15 +3081,21 @@ function showConfirmModal(message, onConfirm, onCancel) {
 let rolloverOfferedFor = '';
 
 // Offer to move into the new school year once September rolls around.
-// Declining is remembered so the prompt doesn't reappear every reload.
+// The answer is remembered either way, so the prompt is a once-per-semester
+// thing rather than something that reappears on every reload.
 function checkAcademicYearRollover() {
     const expected = expectedPeriod();
     if (!expected || !appState.activePeriod) return;
 
-    // Only ever move forward, and never re-ask about a period already declined
+    // Only ever move forward, and never re-ask about a period already answered
     if (periodOrder(expected) <= periodOrder(appState.activePeriod)) return;
     if (appState.rolloverDismissedFor === expected) return;
     if (rolloverOfferedFor === expected) return;
+
+    // Going back to read an old semester is not a reason to be asked again.
+    // The period existing at all means they have already been moved into it,
+    // since that is the only thing that creates the record.
+    if (appState.periods[expected]) return;
 
     // The profile modal is mandatory until name and grade exist - don't compete with it
     const profileModal = document.getElementById('profile-modal');
@@ -3090,12 +3111,19 @@ function checkAcademicYearRollover() {
         : `Semester ${semester} has started. Switch to <strong>${periodLabel(expected)}</strong>?<br><br>` +
           `Your Semester 1 records are kept.`;
 
+    // Both answers are recorded: saying yes and then stepping back to last
+    // semester to look something up should not bring the question back.
+    const remember = () => {
+        appState.rolloverDismissedFor = expected;
+        saveAllData();
+    };
+
     showConfirmModal(message,
-        () => switchPeriod(expected, { silent: true }),
         () => {
-            appState.rolloverDismissedFor = expected;
-            saveAllData();
-        }
+            remember();
+            switchPeriod(expected, { silent: true });
+        },
+        remember
     );
 }
 window.checkAcademicYearRollover = checkAcademicYearRollover;
