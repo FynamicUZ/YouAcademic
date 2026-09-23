@@ -2739,80 +2739,25 @@ select:not([data-enhanced]) {
 }
 
 /* The subject list is the only sidebar section that grows without bound, so on
-   desktop it is capped instead of pushing the nav buttons below the fold,
-   where they read as missing rather than scrolled past. The cap is applied by
-   sizeSubjectList(), which measures the rendered items and sets
-   --subject-list-h to min(content, 184px) — so a short list takes only the
-   room it needs and an empty one takes none.
-
-   Hovering a list that IS cut off turns it into a
-   panel anchored to its own bottom edge, so it grows UPWARDS over the profile
-   block rather than shoving the nav buttons down, and the whole list is
-   readable without scrolling a cramped strip. The mobile drawer is left
-   alone — there the sidebar is a full-height drawer already. */
+   desktop it takes whatever room the sidebar has left and scrolls inside its
+   own box, instead of pushing the nav buttons below the fold where they read
+   as missing rather than scrolled past. The blocks under it are collapsed (see
+   the grade filter below), which is what leaves it room worth having. The
+   mobile drawer is left alone - there the whole sidebar scrolls. */
 @media (min-width: 993px) {
     .sidebar-subjects {
         display: flex;
         flex-direction: column;
-        flex: 0 0 auto;
-        /* --subject-list-h is measured and set by sizeSubjectList(); the 40px
-           is the section header. An empty list therefore reserves nothing. */
-        height: calc(40px + var(--subject-list-h, 0px));
-        position: relative;
-    }
-
-    .sidebar-subjects .section-header {
-        flex: 0 0 auto;
+        flex: 1 1 auto;
+        min-height: 120px;
     }
 
     #subject-list {
-        /* Anchored to the bottom of its box so only `height` ever changes,
-           which is what makes the expansion animate instead of snapping. */
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: var(--subject-list-h, 0px);
+        flex: 1;
+        min-height: 0;
         overflow-y: auto;
         overflow-x: hidden; /* the items slide right on hover; don't scroll for it */
         padding-right: 4px;
-        border-radius: var(--radius-sm);
-        transition: height 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-                    box-shadow 0.22s ease,
-                    padding 0.22s ease;
-    }
-
-    /* Expanded panel: bottom stays put, the top edge rises */
-    .sidebar-subjects.is-clipped:hover #subject-list,
-    .sidebar-subjects.is-clipped:focus-within #subject-list {
-        /* Capped so the panel's top edge stays inside the sidebar: the blocks
-           above it are a fixed ~300px tall and do not scale with the viewport. */
-        height: min(500px, calc(100vh - 140px));
-        z-index: 20;
-        padding: 6px 8px 6px 6px;
-        background: var(--bg-card);
-        border: 1px solid var(--primary-color);
-        box-shadow: var(--shadow-lg);
-    }
-
-    /* Hint that the short list has more in it — only when it is cut off */
-    .sidebar-subjects.is-clipped::after {
-        content: '';
-        position: absolute;
-        left: 0;
-        right: 4px;
-        bottom: 0;
-        height: 24px;
-        pointer-events: none;
-        border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-        background: linear-gradient(to bottom, transparent, var(--bg-card));
-        opacity: 0.9;
-        transition: opacity 0.2s ease;
-    }
-
-    .sidebar-subjects.is-clipped:hover::after,
-    .sidebar-subjects.is-clipped:focus-within::after {
-        opacity: 0;
     }
 }
 
@@ -3023,16 +2968,11 @@ select:not([data-enhanced]) {
         margin-bottom: 8px;
     }
 
-    /* Grade filter: one wrapped row of pills instead of a 2-column grid */
-    .color-filter-section {
-        padding: 8px 10px;
-    }
-
     .color-filter-section h4 {
-        margin-bottom: 6px;
         font-size: 0.78rem;
     }
 
+    /* One wrapped row of pills instead of a 2-column grid */
     .color-filters {
         display: flex;
         flex-wrap: wrap;
@@ -3065,4 +3005,65 @@ select:not([data-enhanced]) {
 
 .sidebar-utility .sidebar-btn.danger:hover {
     background: var(--danger-color);
+}
+
+
+/* =====================================================================
+   Collapsed blocks under the subject list
+
+   The grade filter is set once and then left alone, but as a permanent
+   2x3 grid of buttons it took a third of the sidebar and squeezed the
+   subject list into a strip. It now shows only its heading, with the
+   active filter named there, and the buttons float up over the subject
+   list on hover. Anchoring the panel to `bottom: 100%` is what makes it
+   open upwards; nothing below it moves, so the nav buttons stay put.
+   ===================================================================== */
+@media (min-width: 993px) {
+    .color-filter-section {
+        position: relative;
+        flex: 0 0 auto;
+        padding: 7px 10px;
+    }
+
+    .color-filter-section h4 {
+        margin-bottom: 0;
+        gap: 6px;
+    }
+
+    /* Which filter is on, since the buttons themselves are hidden */
+    .active-filter-label {
+        margin-left: auto;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        background: rgba(99, 102, 241, 0.14);
+    }
+
+    .color-filter-section .color-filters {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 100%;
+        margin-bottom: 6px;
+        z-index: 20;
+        padding: 8px;
+        border-radius: var(--radius);
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-lg);
+
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(4px);
+        transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s;
+    }
+
+    .color-filter-section:hover .color-filters,
+    .color-filter-section:focus-within .color-filters {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+    }
 }

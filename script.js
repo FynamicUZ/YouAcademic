@@ -882,65 +882,8 @@ function renderSidebar() {
         subjectList.appendChild(li);
     });
 
-    sizeSubjectList();
 }
 
-// Tallest the resting subject list is allowed to get before it scrolls
-const SUBJECT_LIST_REST_MAX = 184;
-// Never shrink the resting list below this: a header with nothing under it
-// reads as a bug rather than as a collapsed list
-const SUBJECT_LIST_REST_MIN = 78;
-// Height of the "Subjects" row above the list (32px button + 8px margin)
-const SUBJECT_SECTION_HEADER = 40;
-// Below this the sidebar is a full-height drawer and sizes itself
-const SIDEBAR_DESKTOP_MIN_WIDTH = 993;
-
-// On desktop the list is absolutely positioned so it can grow upwards on
-// hover, which means it can no longer size its own box. Measure what was
-// rendered and hand the height to CSS.
-//
-// The resting height is the smallest of three things: what the items actually
-// need, a fixed cap, and the room the other sidebar blocks leave behind. That
-// last one is what keeps the nav buttons and the footer on screen instead of
-// scrolled off the bottom — the whole list is still one hover away.
-function sizeSubjectList() {
-    const section = document.querySelector('.sidebar-subjects');
-    const list = document.getElementById('subject-list');
-    if (!section || !list) return;
-
-    const previous = list.style.height;
-    list.style.height = 'auto';
-    const content = list.scrollHeight;
-    list.style.height = previous;
-
-    let height = Math.min(content, SUBJECT_LIST_REST_MAX);
-
-    const sidebar = section.closest('.sidebar');
-    if (sidebar && window.innerWidth >= SIDEBAR_DESKTOP_MIN_WIDTH) {
-        height = Math.min(height, Math.max(0, sidebarRoomForSubjects(sidebar, section)));
-        // On a short viewport there may be no room at all. Show a couple of
-        // items anyway and let the sidebar scroll, as it did before.
-        height = Math.max(height, Math.min(content, SUBJECT_LIST_REST_MIN));
-    }
-
-    section.style.setProperty('--subject-list-h', height + 'px');
-    // Only fade the bottom edge when there is actually more below it
-    section.classList.toggle('is-clipped', content > height);
-}
-
-// Vertical space left in the sidebar once every other block has taken its own
-function sidebarRoomForSubjects(sidebar, section) {
-    const children = [...sidebar.children];
-    const used = children.reduce((total, child) =>
-        child === section ? total : total + child.getBoundingClientRect().height, 0);
-
-    const styles = getComputedStyle(sidebar);
-    const gap = parseFloat(styles.rowGap) || 0;
-    const padding = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
-
-    return sidebar.clientHeight - used - gap * (children.length - 1)
-        - padding - SUBJECT_SECTION_HEADER;
-}
 
 // Show exactly one view and light up the matching sidebar button
 function showView(name) {
@@ -2772,6 +2715,10 @@ function initApp() {
             document.querySelectorAll('.color-filter').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             appState.colorFilter = this.dataset.color;
+            // The filter list is collapsed most of the time, so the header has
+            // to say which one is on
+            const label = document.getElementById('active-filter-label');
+            if (label) label.textContent = this.textContent.trim();
             renderSidebar();
         });
     });
@@ -3188,16 +3135,6 @@ function setSelectValue(el, value) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 window.setSelectValue = setSelectValue;
-
-// Icon fonts arrive after first paint and change the height of every item
-window.addEventListener('load', () => sizeSubjectList());
-
-// The room the sidebar can spare changes with the viewport, so re-measure
-let subjectListResizeTimer = null;
-window.addEventListener('resize', () => {
-    clearTimeout(subjectListResizeTimer);
-    subjectListResizeTimer = setTimeout(sizeSubjectList, 120);
-});
 
 function enhanceAllSelects() {
     document.querySelectorAll('select').forEach(enhanceSelect);
