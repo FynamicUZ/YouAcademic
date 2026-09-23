@@ -161,3 +161,122 @@ const TIMETABLES = {
         }
     }
 };
+
+// Extra lessons, transcribed from the school's printed "EXTRA LESSONS
+// SCHEDULE 2026-2027" sheet (rooms 101-109 and 201-206 + Sports hall).
+//
+// Keyed by grade only. The sheet writes "B/G" against almost every entry,
+// meaning both streams attend, so the stream is not part of the key. Entries
+// that cover a range ("5-9 sinf", "8-11") are listed under each grade in the
+// range.
+//
+// The sheet names a subject for some entries and only a teacher for others.
+// Where it named none, the subject is the one that teacher takes on the main
+// timetable - the names match exactly - and those are marked `inferred: true`
+// so it is clear which labels came off the sheet and which did not.
+//
+// No times are printed except for the Sports hall block and the two Friday
+// entries, which the sheet pins to periods 6 and 7.
+
+// [day, room, subject, teacher, grades, options]
+const EXTRA_LESSON_ROWS = [
+    // ---- Monday ----
+    ['mon', '101', 'SAT Math',          "Shaxnoza O'rozova",    [10]],
+    ['mon', '102', 'Mathematics',       'Mr. Sirojiddin',       [6],  { inferred: true }],
+    ['mon', '103', 'Computer Science',  'Ravshan Sodiqov',      [5]],
+    ['mon', '104', 'Computer Science',  'Mr. Jahongir',         [9]],
+    ['mon', '105', 'History',           'Rahimov Baxtiyor',     [5, 6, 7, 8, 9], { inferred: true }],
+    ['mon', '106', 'Economics',         'Amir Taibi',           [11]],
+    ['mon', '107', 'English',           'Haydee Hernandez',     [6]],
+    ['mon', '108', 'Russian',           'Karimov Azamat',       [5, 7, 8], { inferred: true }],
+    ['mon', '109', 'SAT English',       'Baxtiyorov Asadbek',   [10]],
+    ['mon', '201', 'Physics',           'Mr. Otabek',           [11]],
+    ['mon', '202', 'Biology',           'Mr. Amollo',           [8],  { note: 'Alternates Blue/Green with Chemistry' }],
+    ['mon', '203', 'Chemistry',         'Mr. Shahzod',          [8],  { note: 'Alternates Blue/Green with Biology' }],
+    ['mon', '204', 'Ona tili',          'Muhammadiyev Ruslan',  [7, 8]],
+    ['mon', '206', 'Yosh savodxonlar',  'X. Xaydarova',         [5, 6, 7]],
+    ['mon', 'Sports Hall', 'Physical Education', 'Shukurov Obid', [8, 9, 10, 11], { start: '16:30', end: '17:20' }],
+
+    // ---- Tuesday ----
+    ['tue', '101', 'Mathematics',       'Asadov Asror',         [8],  { inferred: true }],
+    ['tue', '102', 'Mathematics',       'Mr. James',            [8],  { inferred: true }],
+    ['tue', '103', 'Computer Science',  'Ravshan Sodiqov',      [6]],
+    ['tue', '105', 'History',           "Raximov To'lqin",      [5, 6, 7, 8, 9], { inferred: true }],
+    ['tue', '106', 'Economics',         'Amir Taibi',           [9]],
+    ['tue', '107', 'English',           'Kamoliddin Amirov',    [5]],
+    ['tue', '108', 'IELTS',             'Ubaydullayeva Gulnoza', [11]],
+    ['tue', '109', 'Mathematics',       'Mr. Anvar',            [10], { inferred: true }],
+    ['tue', '201', 'Physics',           'Mr. Rejo',             [9]],
+    ['tue', '202', 'Science',           'Ms. LI',               [5]],
+    ['tue', '203', 'Chemistry',         'Ms. Anna',             [11], { note: '9 students' }],
+    ['tue', '205', 'Character Education', 'Ergashev Bobir',     [6, 7, 8], { inferred: true }],
+    ['tue', '206', 'Yosh savodxonlar',  'X. Xaydarova',         [5, 6, 7]],
+    ['tue', 'Sports Hall', 'Physical Education', 'Shukurov Obid', [8, 9, 10, 11], { start: '16:30', end: '17:20' }],
+
+    // ---- Wednesday ----
+    ['wed', '101', 'SAT Math',          "Shahnoza O'rozova",    [9],  { note: 'Alternates Blue/Green with Chemistry' }],
+    ['wed', '102', 'Mathematics',       'Mr. Sirojiddin',       [7],  { inferred: true }],
+    ['wed', '103', 'Computer Science',  'Evans Njihia',         [11]],
+    ['wed', '104', 'Computer Science',  'Mr. Jahongir',         [8]],
+    ['wed', '105', 'History',           'Rahimov Baxtiyor',     [5, 6, 7, 8, 9], { inferred: true }],
+    ['wed', '107', 'English',           'Haydee Hernandez',     [8]],
+    ['wed', '108', 'Russian',           'Karimov Azamat',       [9, 10, 11], { inferred: true }],
+    ['wed', '201', 'Physics',           'Mr. Rejo',             [10]],
+    ['wed', '202', 'Biology',           'Mr. Amollo',           [10]],
+    ['wed', '203', 'Chemistry',         'Mr. Shahzod',          [9],  { note: 'Alternates Blue/Green with SAT Math' }],
+    ['wed', '204', 'Ona tili',          'Muhammadiyev Ruslan',  [7, 8]],
+    ['wed', '205', 'Science',           'Ms. LI',               [6]],
+    ['wed', 'Sports Hall', 'Physical Education', 'Shukurov Obid', [8, 9, 10, 11], { start: '16:30', end: '17:20' }],
+
+    // ---- Thursday ----
+    ['thu', '102', 'Mathematics',       'Mr. James / Mr. Anvar', [9], { inferred: true }],
+    ['thu', '103', 'Computer Science',  'Ravshan Sodiqov',      [7]],
+    ['thu', '104', 'Computer Science',  'Evans Njihia',         [10]],
+    ['thu', '105', 'History',           "Raximov To'lqin",      [5, 6, 7, 8, 9], { inferred: true }],
+    ['thu', '106', 'Economics',         'Amir Taibi',           [9]],
+    ['thu', '107', 'English',           'Kamoliddin Amirov',    [7]],
+    ['thu', '108', 'Mathematics',       "O'rozova Shahnoza",    [5, 7]],
+    ['thu', '109', 'Mathematics',       'Asadov Asror',         [11], { note: 'All Grade 11 students (19)', inferred: true }],
+    ['thu', '201', 'Physics',           'Mr. Otabek',           [8]],
+    ['thu', '202', 'Biology',           'Mr. Amollo',           [11], { note: '3 students' }],
+    ['thu', '203', 'Chemistry',         'Ms. Anna',             [10], { note: '7 students' }],
+    ['thu', '204', 'Badiiy mutolaa',    "Turdiyev Ulug'bek",    [5, 6]],
+    ['thu', '205', 'Character Education', 'Ergashev Bobir',     [6, 7, 8], { inferred: true }],
+    ['thu', 'Sports Hall', 'Physical Education', 'Shukurov Obid', [8, 9, 10, 11], { start: '16:30', end: '17:20' }],
+
+    // ---- Friday ---- (the only rows the sheet pins to a period)
+    ['fri', '106', 'IELTS / SAT',       'Ubaydullayeva Gulnoza', [9], { note: 'Green stream, period 6', start: '14:00', end: '14:45' }],
+    ['fri', '106', 'IELTS / SAT',       'Baxtiyorov Asadbek',   [9],  { note: 'Blue stream, period 7', start: '14:50', end: '15:35' }],
+    ['fri', '109', 'IELTS',             'Gulnoza Ubaydullayeva', [10], { note: 'Period 7', start: '14:50', end: '15:35' }]
+];
+
+// Turn the flat rows into one list per grade, giving every entry an id that
+// stays the same between reloads so a student's edits keep pointing at it.
+const EXTRA_LESSONS = (() => {
+    const byGrade = {};
+    const seen = {};
+
+    EXTRA_LESSON_ROWS.forEach(([day, room, name, teacher, grades, options = {}]) => {
+        grades.forEach(grade => {
+            const base = `x-${day}-${room}-${grade}`.toLowerCase().replace(/\s+/g, '');
+            seen[base] = (seen[base] || 0) + 1;
+            const id = seen[base] > 1 ? `${base}-${seen[base]}` : base;
+
+            const key = String(grade);
+            if (!byGrade[key]) byGrade[key] = [];
+            byGrade[key].push({
+                id,
+                day,
+                room,
+                name,
+                teacher,
+                start: options.start || '',
+                end: options.end || '',
+                note: options.note || '',
+                inferred: !!options.inferred
+            });
+        });
+    });
+
+    return byGrade;
+})();

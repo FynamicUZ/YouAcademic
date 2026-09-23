@@ -134,7 +134,8 @@ const appState = {
     // Timetable customisations, both keyed by grade only: the printed Blue and
     // Green sheets differ, but a student's own edits follow them, not the class.
     timetableEdits: {},   // grade -> day -> slot index -> cell override or null
-    extracurricular: {},  // grade -> array of entries
+    extraEdits: {},       // grade -> printed extra id -> override or null (removed)
+    extracurricular: {},  // grade -> array of the student's own entries
     sortMode: 'percentage',
     colorFilter: 'all',
     historySubject: null, // Which subject the history trend chart is showing
@@ -341,6 +342,7 @@ function normalizeState() {
 // Apply a plain v2 payload onto appState (used by load and by cloud sync)
 function applyStatePayload(payload) {
     appState.timetableEdits = payload.timetableEdits || {};
+    appState.extraEdits = payload.extraEdits || {};
     appState.extracurricular = payload.extracurricular || {};
     appState.studentName = payload.studentName || '';
     appState.activePeriod = payload.activePeriod || '';
@@ -461,6 +463,7 @@ function buildStatePayload() {
     return {
         studentName: appState.studentName,
         timetableEdits: appState.timetableEdits,
+        extraEdits: appState.extraEdits,
         extracurricular: appState.extracurricular,
         activePeriod: appState.activePeriod,
         anchorGrade: appState.anchorGrade,
@@ -919,20 +922,55 @@ function bindTimetableContextMenu() {
         if (extraRow) {
             const entry = extracurricularForDay(dayKey)
                 .find(item => item.id === extraRow.dataset.extra);
-            return showContextMenu(e, [
-                { label: 'Edit club', icon: 'fa-pen', run: () => showExtraModal(dayKey, entry) },
-                { label: 'Delete club', icon: 'fa-trash', danger: true, run: () => {
+            if (!entry) return;
+
+            const options = [
+                { label: 'Edit', icon: 'fa-pen', run: () => showExtraModal(dayKey, entry) }
+            ];
+
+            if (entry.printed) {
+                // The sheet's own rows are hidden rather than deleted, so they
+                // can always come back
+                options.push({ label: 'Hide from my timetable', icon: 'fa-eye-slash',
+                    danger: true, run: () => {
+                        setExtraOverride(entry.id, null);
+                        renderTimetable();
+                        showToast('Hidden from your timetable');
+                    } });
+                if (entry.edited) {
+                    options.push({ label: 'Reset to printed sheet', icon: 'fa-rotate-left', run: () => {
+                        clearExtraOverride(entry.id);
+                        renderTimetable();
+                        showToast('Back to the printed sheet');
+                    } });
+                }
+            } else {
+                options.push({ label: 'Delete', icon: 'fa-trash', danger: true, run: () => {
                     deleteExtracurricular(entry.id);
                     renderTimetable();
-                    showToast('Club removed');
-                } }
-            ]);
+                    showToast('Removed');
+                } });
+            }
+
+            options.push({ label: 'Add your own', icon: 'fa-plus',
+                run: () => showExtraModal(dayKey, null) });
+            return showContextMenu(e, options);
         }
 
         if (section) {
-            return showContextMenu(e, [
-                { label: 'Add club', icon: 'fa-plus', run: () => showExtraModal(dayKey, null) }
-            ]);
+            const hidden = Object.values(appState.extraEdits[String(appState.grade)] || {})
+                .filter(value => value === null).length;
+            const options = [
+                { label: 'Add your own', icon: 'fa-plus', run: () => showExtraModal(dayKey, null) }
+            ];
+            if (hidden) {
+                options.push({ label: `Show ${hidden} hidden`, icon: 'fa-eye', run: () => {
+                    restoreHiddenExtras();
+                    renderTimetable();
+                    showToast('Hidden extra lessons are back');
+                } });
+            }
+            return showContextMenu(e, options);
         }
 
         const index = Number(lessonRow.dataset.slot);
@@ -951,7 +989,7 @@ function bindTimetableContextMenu() {
                 showToast('Back to the printed sheet');
             } });
         }
-        items.push({ label: 'Add club', icon: 'fa-star', run: () => showExtraModal(dayKey, null) });
+        items.push({ label: 'Add extra lesson', icon: 'fa-star', run: () => showExtraModal(dayKey, null) });
         showContextMenu(e, items);
     });
 }
@@ -1061,17 +1099,25 @@ function saveLessonModal() {
 let editingExtra = null;
 
 function showExtraModal(dayKey, entry) {
-    editingExtra = { dayKey, id: entry ? entry.id : '' };
+    editingExtra = { dayKey, id: entry ? entry.id : '', printed: !!(entry && entry.printed) };
 
-    document.getElementById('extra-modal-day').textContent =
-        WEEKDAYS.find(d => d.key === dayKey).label;
+    const day = WEEKDAYS.find(d => d.key === dayKey).label;
+    document.getElementById('extra-modal-day').textContent = editingExtra.printed
+        ? `${day} · from the school's extra-lessons sheet`
+        : day;
     document.getElementById('extra-name-input').value = entry ? entry.name : '';
     document.getElementById('extra-start-input').value = entry ? (entry.start || '') : '';
     document.getElementById('extra-end-input').value = entry ? (entry.end || '') : '';
     document.getElementById('extra-room-input').value = entry ? (entry.room || '') : '';
     document.getElementById('extra-teacher-input').value = entry ? (entry.teacher || '') : '';
 
-    document.getElementById('extra-delete').style.display = entry ? 'inline-flex' : 'none';
+    // A printed row is hidden, never deleted, so it can always come back
+    const remove = document.getElementById('extra-delete');
+    remove.style.display = entry ? 'inline-flex' : 'none';
+    remove.innerHTML = editingExtra.printed
+        ? '<i class="fas fa-eye-slash"></i> Hide'
+        : '<i class="fas fa-trash"></i> Delete';
+
     document.getElementById('extra-modal').classList.add('active');
 }
 
@@ -1080,25 +1126,34 @@ function saveExtraModal() {
 
     const name = document.getElementById('extra-name-input').value.trim();
     if (!name) {
-        showToast('Give the club a name', 'error');
+        showToast('Give it a name', 'error');
         return;
     }
 
-    saveExtracurricular({
-        id: editingExtra.id || 'extra-' + Date.now(),
-        day: editingExtra.dayKey,
+    const fields = {
         name,
         start: document.getElementById('extra-start-input').value.trim(),
         end: document.getElementById('extra-end-input').value.trim(),
         room: document.getElementById('extra-room-input').value.trim(),
-        teacher: document.getElementById('extra-teacher-input').value.trim(),
-        icon: 'fa-puzzle-piece'
-    });
+        teacher: document.getElementById('extra-teacher-input').value.trim()
+    };
+
+    if (editingExtra.printed) {
+        // Store only the changes; the printed row underneath stays intact
+        setExtraOverride(editingExtra.id, fields);
+    } else {
+        saveExtracurricular({
+            id: editingExtra.id || 'extra-' + Date.now(),
+            day: editingExtra.dayKey,
+            icon: 'fa-puzzle-piece',
+            ...fields
+        });
+    }
 
     editingExtra = null;
     closeAllModals();
     renderTimetable();
-    showToast('Club saved');
+    showToast('Saved');
 }
 
 // Show exactly one view and light up the matching sidebar button
@@ -2191,11 +2246,50 @@ function extracurricularForGrade(grade = appState.grade) {
     return appState.extracurricular[key];
 }
 
-// One day's clubs, in start-time order
+// The override for one printed extra, or undefined when the sheet stands
+function extraOverride(id, grade = appState.grade) {
+    const edits = appState.extraEdits[String(grade)];
+    return edits ? edits[id] : undefined;
+}
+
+function setExtraOverride(id, value) {
+    const key = String(appState.grade);
+    if (!appState.extraEdits[key]) appState.extraEdits[key] = {};
+    appState.extraEdits[key][id] = value;
+    saveAllData();
+}
+
+function clearExtraOverride(id) {
+    const edits = appState.extraEdits[String(appState.grade)];
+    if (!edits) return;
+    delete edits[id];
+    saveAllData();
+}
+
+// One day's extras: the printed sheet with the student's edits applied, then
+// whatever they added themselves, all in start-time order. Entries with no
+// printed time sort last, since the sheet only pins a few of them.
 function extracurricularForDay(dayKey, grade = appState.grade) {
-    return (appState.extracurricular[String(grade)] || [])
+    const printed = (EXTRA_LESSONS[String(grade)] || [])
         .filter(entry => entry.day === dayKey)
-        .sort((a, b) => minutesOfDay(a.start || '0:00') - minutesOfDay(b.start || '0:00'));
+        .map(entry => {
+            const override = extraOverride(entry.id, grade);
+            if (override === null) return null;           // removed by the student
+            if (override === undefined) return { ...entry, printed: true, edited: false };
+            return { ...entry, ...override, printed: true, edited: true };
+        })
+        .filter(Boolean);
+
+    const own = (appState.extracurricular[String(grade)] || [])
+        .filter(entry => entry.day === dayKey)
+        .map(entry => ({ ...entry, printed: false, edited: false }));
+
+    // Most rows carry no time; the sheet only pins a few. Those sort as if they
+    // ran straight after the last lesson, which is when they actually happen,
+    // so a 16:30 block still lands at the bottom rather than at the top.
+    const afterLessons = LESSON_TIMES[LESSON_TIMES.length - 1].end;
+    const at = entry => minutesOfDay(entry.start || afterLessons);
+    return [...printed, ...own].sort((a, b) => at(a) - at(b));
 }
 
 function saveExtracurricular(entry) {
@@ -2203,6 +2297,15 @@ function saveExtracurricular(entry) {
     const existing = list.findIndex(item => item.id === entry.id);
     if (existing >= 0) list[existing] = entry;
     else list.push(entry);
+    saveAllData();
+}
+
+// Put back every printed extra the student hid
+function restoreHiddenExtras() {
+    const edits = appState.extraEdits[String(appState.grade)] || {};
+    Object.keys(edits).forEach(id => {
+        if (edits[id] === null) delete edits[id];
+    });
     saveAllData();
 }
 
@@ -2413,12 +2516,13 @@ function extracurricularMarkup(dayKey) {
     const entries = extracurricularForDay(dayKey);
 
     const rows = entries.map(entry => {
-        const detail = [entry.room, entry.teacher].filter(Boolean).join(' · ');
+        const detail = [entry.room, entry.teacher, entry.note].filter(Boolean).join(' · ');
         const time = entry.start ? `${entry.start}${entry.end ? ' – ' + entry.end : ''}` : '';
-        return `<div class="timetable-row extracurricular" data-extra="${entry.id}">
+        return `<div class="timetable-row extracurricular ${entry.edited ? 'edited' : ''}"
+                     data-extra="${entry.id}">
             <div class="lesson-slot">
                 <span class="lesson-number"><i class="fas fa-star"></i></span>
-                ${time ? `<span class="lesson-time">${time}</span>` : ''}
+                ${time ? `<span class="lesson-time">${time}</span>` : '<span class="lesson-time muted">after lessons</span>'}
             </div>
             <div class="lesson-body">
                 <span class="lesson-icon"><i class="fas ${entry.icon || 'fa-puzzle-piece'}"></i></span>
@@ -2426,6 +2530,8 @@ function extracurricularMarkup(dayKey) {
                     <span class="lesson-name">${escapeHtml(entry.name)}</span>
                     ${detail ? `<span class="lesson-detail">${escapeHtml(detail)}</span>` : ''}
                 </div>
+                ${entry.printed ? '' : '<span class="lesson-block">Yours</span>'}
+                ${entry.edited ? '<span class="lesson-edited" title="Changed from the printed sheet"><i class="fas fa-pen"></i></span>' : ''}
             </div>
         </div>`;
     }).join('');
@@ -2438,8 +2544,8 @@ function extracurricularMarkup(dayKey) {
             </button>
         </div>
         ${rows || `<div class="timetable-free extracurricular-empty">
-            <i class="fas fa-puzzle-piece"></i> Nothing after lessons.
-            Right-click anywhere here, or use Add.
+            <i class="fas fa-puzzle-piece"></i> Nothing on the extra-lessons sheet
+            for Grade ${appState.grade} today. Right-click here, or use Add.
         </div>`}
     </div>`;
 }
@@ -3098,11 +3204,13 @@ function initApp() {
     document.getElementById('extra-save').addEventListener('click', saveExtraModal);
     document.getElementById('extra-delete').addEventListener('click', () => {
         if (!editingExtra || !editingExtra.id) return;
-        deleteExtracurricular(editingExtra.id);
+        if (editingExtra.printed) setExtraOverride(editingExtra.id, null);
+        else deleteExtracurricular(editingExtra.id);
+        const wasPrinted = editingExtra.printed;
         editingExtra = null;
         closeAllModals();
         renderTimetable();
-        showToast('Club removed');
+        showToast(wasPrinted ? 'Hidden from your timetable' : 'Removed');
     });
 
     // GPA breakdown buttons on the two GPA stat cards
