@@ -150,15 +150,39 @@ if (!CONFIGURED) {
             return { schemaVersion: SCHEMA_VERSION, ...migrated };
         }
 
-        return {
+        const normalised = {
             schemaVersion: SCHEMA_VERSION,
             studentName: cloud.studentName || '',
             activePeriod: cloud.activePeriod || '',
             anchorGrade: cloud.anchorGrade || '',
             anchorYearStart: cloud.anchorYearStart || 0,
             rolloverDismissedFor: cloud.rolloverDismissedFor || '',
-            periods: (cloud.periods && typeof cloud.periods === 'object') ? cloud.periods : {}
+            periods: plainObject(cloud.periods),
+            timetableEdits: plainObject(cloud.timetableEdits),
+            extraEdits: plainObject(cloud.extraEdits),
+            extracurricular: plainObject(cloud.extracurricular)
         };
+
+        warnOnDroppedFields(normalised);
+        return normalised;
+    }
+
+    function plainObject(value) {
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    }
+
+    // This function whitelists what comes back from the cloud, which means a
+    // field added to the local payload and not added here is silently wiped on
+    // the next pull. That is exactly how hidden extra lessons came back after a
+    // refresh. Shout about it in the console rather than let it happen quietly.
+    function warnOnDroppedFields(normalised) {
+        const local = window.__buildStatePayload ? window.__buildStatePayload() : null;
+        if (!local) return;
+        const dropped = Object.keys(local).filter(key => !(key in normalised));
+        if (dropped.length) {
+            console.warn('[cloud] buildCloudPayload drops these local fields, so they will ' +
+                'be lost on the next pull: ' + dropped.join(', '));
+        }
     }
 
     // Stored on successful push or successful pull — represents the last known in-sync state
