@@ -131,6 +131,10 @@ const appState = {
     currentView: 'dashboard',
     currentSubject: null,
     studentName: '', // Empty by default
+    // Timetable customisations, both keyed by grade only: the printed Blue and
+    // Green sheets differ, but a student's own edits follow them, not the class.
+    timetableEdits: {},   // grade -> day -> slot index -> cell override or null
+    extracurricular: {},  // grade -> array of entries
     sortMode: 'percentage',
     colorFilter: 'all',
     historySubject: null, // Which subject the history trend chart is showing
@@ -336,6 +340,8 @@ function normalizeState() {
 
 // Apply a plain v2 payload onto appState (used by load and by cloud sync)
 function applyStatePayload(payload) {
+    appState.timetableEdits = payload.timetableEdits || {};
+    appState.extracurricular = payload.extracurricular || {};
     appState.studentName = payload.studentName || '';
     appState.activePeriod = payload.activePeriod || '';
     appState.anchorGrade = payload.anchorGrade || '';
@@ -454,6 +460,8 @@ function updateSubjectsForGrade(grade, ob, oa) {
 function buildStatePayload() {
     return {
         studentName: appState.studentName,
+        timetableEdits: appState.timetableEdits,
+        extracurricular: appState.extracurricular,
         activePeriod: appState.activePeriod,
         anchorGrade: appState.anchorGrade,
         anchorYearStart: appState.anchorYearStart,
@@ -884,6 +892,214 @@ function renderSidebar() {
 
 }
 
+
+/* ------------------------------------------------------------
+   Right-click menu over the timetable
+   ------------------------------------------------------------ */
+
+// Right-clicking a lesson row, a club row, or the clubs section opens the set
+// of changes that make sense for whatever was clicked.
+//
+// Bound once, to the list container, which outlives every re-render. Binding
+// per render would stack up listeners, each holding the day it was bound on,
+// so a right-click would act on whichever day the timetable opened at.
+function bindTimetableContextMenu() {
+    const body = document.getElementById('timetable-body');
+    if (!body) return;
+
+    body.addEventListener('contextmenu', (e) => {
+        const dayKey = appState.timetableDay || defaultTimetableDay();
+        const extraRow = e.target.closest('.timetable-row.extracurricular');
+        const lessonRow = e.target.closest('.timetable-row:not(.extracurricular)');
+        const section = e.target.closest('.extracurricular-section');
+        if (!extraRow && !lessonRow && !section) return;
+
+        e.preventDefault();
+
+        if (extraRow) {
+            const entry = extracurricularForDay(dayKey)
+                .find(item => item.id === extraRow.dataset.extra);
+            return showContextMenu(e, [
+                { label: 'Edit club', icon: 'fa-pen', run: () => showExtraModal(dayKey, entry) },
+                { label: 'Delete club', icon: 'fa-trash', danger: true, run: () => {
+                    deleteExtracurricular(entry.id);
+                    renderTimetable();
+                    showToast('Club removed');
+                } }
+            ]);
+        }
+
+        if (section) {
+            return showContextMenu(e, [
+                { label: 'Add club', icon: 'fa-plus', run: () => showExtraModal(dayKey, null) }
+            ]);
+        }
+
+        const index = Number(lessonRow.dataset.slot);
+        const items = [
+            { label: 'Change lesson', icon: 'fa-pen', run: () => showLessonModal(dayKey, index) },
+            { label: 'Mark as free', icon: 'fa-mug-hot', run: () => {
+                setLessonOverride(dayKey, index, null);
+                renderTimetable();
+                showToast('Slot marked free');
+            } }
+        ];
+        if (lessonOverride(dayKey, index) !== undefined) {
+            items.push({ label: 'Reset to printed sheet', icon: 'fa-rotate-left', run: () => {
+                clearLessonOverride(dayKey, index);
+                renderTimetable();
+                showToast('Back to the printed sheet');
+            } });
+        }
+        items.push({ label: 'Add club', icon: 'fa-star', run: () => showExtraModal(dayKey, null) });
+        showContextMenu(e, items);
+    });
+}
+
+// One menu exists at a time; opening a second closes the first
+function showContextMenu(event, items) {
+    closeContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    menu.id = 'timetable-context-menu';
+    menu.innerHTML = items.map((item, i) =>
+        `<button class="context-menu-item ${item.danger ? 'danger' : ''}" data-index="${i}">
+            <i class="fas ${item.icon}"></i> ${item.label}
+        </button>`).join('');
+
+    document.body.appendChild(menu);
+
+    // Keep the menu on screen when the click lands near an edge
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
+    const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
+    menu.style.left = Math.max(8, left) + 'px';
+    menu.style.top = Math.max(8, top) + 'px';
+
+    menu.querySelectorAll('.context-menu-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            closeContextMenu();
+            items[Number(btn.dataset.index)].run();
+        });
+    });
+}
+
+function closeContextMenu() {
+    const open = document.getElementById('timetable-context-menu');
+    if (open) open.remove();
+}
+
+document.addEventListener('click', closeContextMenu);
+document.addEventListener('scroll', closeContextMenu, true);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeContextMenu();
+});
+
+/* ------------------------------------------------------------
+   The two edit dialogs
+   ------------------------------------------------------------ */
+
+// Which day/slot the lesson dialog is currently editing
+let editingLesson = null;
+
+function showLessonModal(dayKey, index) {
+    editingLesson = { dayKey, index };
+
+    const week = activeTimetable();
+    const printed = week ? resolveTimetableCell((week[dayKey] || [])[index]) : null;
+    const override = lessonOverride(dayKey, index);
+    const current = override || printed || { name: '', room: '', teacher: '', subjectId: '' };
+
+    const slot = LESSON_TIMES[index];
+    document.getElementById('lesson-modal-slot').textContent =
+        'Lesson ' + slot.n + ' · ' + slot.start + ' – ' + slot.end + ' · ' +
+        WEEKDAYS.find(d => d.key === dayKey).label;
+
+    // The subject picker is what links a lesson back to its grades page
+    const select = document.getElementById('lesson-subject-input');
+    select.innerHTML = '<option value="">Not a graded subject</option>' +
+        appState.subjects.map(subject =>
+            `<option value="${subject.id}">${escapeHtml(subject.name)}</option>`).join('');
+
+    document.getElementById('lesson-name-input').value = current.name || '';
+    document.getElementById('lesson-room-input').value = current.room || '';
+    document.getElementById('lesson-teacher-input').value = current.teacher || '';
+    setSelectValue(select, current.subjectId || '');
+
+    document.getElementById('lesson-modal').classList.add('active');
+}
+
+function saveLessonModal() {
+    if (!editingLesson) return;
+
+    const subjectId = document.getElementById('lesson-subject-input').value;
+    const subject = appState.subjects.find(item => item.id === subjectId);
+    const name = document.getElementById('lesson-name-input').value.trim() ||
+        (subject ? subject.name : '');
+
+    if (!name) {
+        showToast('Give the lesson a name', 'error');
+        return;
+    }
+
+    setLessonOverride(editingLesson.dayKey, editingLesson.index, {
+        name,
+        room: document.getElementById('lesson-room-input').value.trim(),
+        teacher: document.getElementById('lesson-teacher-input').value.trim(),
+        subjectId,
+        icon: subject ? subject.icon : 'fa-pen'
+    });
+
+    editingLesson = null;
+    closeAllModals();
+    renderTimetable();
+    showToast('Lesson updated');
+}
+
+// Which club the dialog is editing, and on which day a new one lands
+let editingExtra = null;
+
+function showExtraModal(dayKey, entry) {
+    editingExtra = { dayKey, id: entry ? entry.id : '' };
+
+    document.getElementById('extra-modal-day').textContent =
+        WEEKDAYS.find(d => d.key === dayKey).label;
+    document.getElementById('extra-name-input').value = entry ? entry.name : '';
+    document.getElementById('extra-start-input').value = entry ? (entry.start || '') : '';
+    document.getElementById('extra-end-input').value = entry ? (entry.end || '') : '';
+    document.getElementById('extra-room-input').value = entry ? (entry.room || '') : '';
+    document.getElementById('extra-teacher-input').value = entry ? (entry.teacher || '') : '';
+
+    document.getElementById('extra-delete').style.display = entry ? 'inline-flex' : 'none';
+    document.getElementById('extra-modal').classList.add('active');
+}
+
+function saveExtraModal() {
+    if (!editingExtra) return;
+
+    const name = document.getElementById('extra-name-input').value.trim();
+    if (!name) {
+        showToast('Give the club a name', 'error');
+        return;
+    }
+
+    saveExtracurricular({
+        id: editingExtra.id || 'extra-' + Date.now(),
+        day: editingExtra.dayKey,
+        name,
+        start: document.getElementById('extra-start-input').value.trim(),
+        end: document.getElementById('extra-end-input').value.trim(),
+        room: document.getElementById('extra-room-input').value.trim(),
+        teacher: document.getElementById('extra-teacher-input').value.trim(),
+        icon: 'fa-puzzle-piece'
+    });
+
+    editingExtra = null;
+    closeAllModals();
+    renderTimetable();
+    showToast('Club saved');
+}
 
 // Show exactly one view and light up the matching sidebar button
 function showView(name) {
@@ -1923,6 +2139,80 @@ function streamLabel(key) {
     return stream ? stream.label : '';
 }
 
+/* ============================================================
+   Timetable customisation
+   ============================================================
+   The printed sheets are the starting point, not the last word: rooms move,
+   teachers swap, and clubs are not on the sheet at all. Both kinds of change
+   are keyed by grade rather than by stream - a student stays in one class, so
+   their own edits travel with them even though Blue and Green print different
+   sheets.
+
+   A lesson override replaces what the sheet says for one slot on one day. An
+   override of `null` means the slot was emptied. No entry at all means the
+   printed cell stands.
+*/
+
+// Lesson overrides for the active grade, created on demand
+function timetableEditsForGrade(grade = appState.grade) {
+    const key = String(grade);
+    if (!appState.timetableEdits[key]) appState.timetableEdits[key] = {};
+    return appState.timetableEdits[key];
+}
+
+// The override for one slot, or undefined when the printed cell stands
+function lessonOverride(dayKey, index, grade = appState.grade) {
+    const day = appState.timetableEdits[String(grade)];
+    if (!day || !day[dayKey]) return undefined;
+    return day[dayKey][index];
+}
+
+// Replace one slot. `cell` is {name, room, teacher} or null to empty the slot.
+function setLessonOverride(dayKey, index, cell) {
+    const edits = timetableEditsForGrade();
+    if (!edits[dayKey]) edits[dayKey] = {};
+    edits[dayKey][index] = cell;
+    saveAllData();
+}
+
+// Put a slot back to whatever the printed sheet says
+function clearLessonOverride(dayKey, index) {
+    const edits = appState.timetableEdits[String(appState.grade)];
+    if (!edits || !edits[dayKey]) return;
+    delete edits[dayKey][index];
+    if (Object.keys(edits[dayKey]).length === 0) delete edits[dayKey];
+    saveAllData();
+}
+
+// Extracurricular entries for the active grade, created on demand
+function extracurricularForGrade(grade = appState.grade) {
+    const key = String(grade);
+    if (!appState.extracurricular[key]) appState.extracurricular[key] = [];
+    return appState.extracurricular[key];
+}
+
+// One day's clubs, in start-time order
+function extracurricularForDay(dayKey, grade = appState.grade) {
+    return (appState.extracurricular[String(grade)] || [])
+        .filter(entry => entry.day === dayKey)
+        .sort((a, b) => minutesOfDay(a.start || '0:00') - minutesOfDay(b.start || '0:00'));
+}
+
+function saveExtracurricular(entry) {
+    const list = extracurricularForGrade();
+    const existing = list.findIndex(item => item.id === entry.id);
+    if (existing >= 0) list[existing] = entry;
+    else list.push(entry);
+    saveAllData();
+}
+
+function deleteExtracurricular(id) {
+    const key = String(appState.grade);
+    appState.extracurricular[key] = (appState.extracurricular[key] || [])
+        .filter(entry => entry.id !== id);
+    saveAllData();
+}
+
 // The week for the active period, or null when the grade or stream isn't known
 function activeTimetable() {
     const byGrade = TIMETABLES[String(appState.grade)];
@@ -1990,6 +2280,30 @@ function resolveTimetableCell(cell) {
     return { name: detail.name, icon: detail.icon, room, teacher, block, subjectId: tracked ? subjectId : null };
 }
 
+// The lesson to show in one slot: the student's own edit if there is one,
+// otherwise whatever the printed sheet says.
+function lessonForSlot(cell, dayKey, index) {
+    const override = lessonOverride(dayKey, index);
+    if (override === undefined) {
+        const lesson = resolveTimetableCell(cell);
+        return lesson ? { ...lesson, edited: false } : null;
+    }
+    if (override === null) return null; // slot deliberately emptied
+
+    const detail = SUBJECT_DETAILS[override.subjectId];
+    const tracked = override.subjectId &&
+        appState.subjects.some(subject => subject.id === override.subjectId);
+    return {
+        name: override.name,
+        icon: override.icon || (detail ? detail.icon : 'fa-pen'),
+        room: override.room || '',
+        teacher: override.teacher || '',
+        block: '',
+        subjectId: tracked ? override.subjectId : null,
+        edited: true
+    };
+}
+
 function renderTimetable() {
     const dayKey = appState.timetableDay || defaultTimetableDay();
     appState.timetableDay = dayKey;
@@ -2049,13 +2363,13 @@ function renderTimetable() {
 
     body.innerHTML = lessons.map((cell, index) => {
         const slot = LESSON_TIMES[index];
-        const lesson = resolveTimetableCell(cell);
+        const lesson = lessonForSlot(cell, dayKey, index);
         const breakAfter = LESSON_BREAKS[slot.n];
         const breakRow = breakAfter && index < lessons.length - 1
             ? `<div class="timetable-break"><span>${breakAfter}</span></div>` : '';
 
         if (!lesson) {
-            return `<div class="timetable-row free">
+            return `<div class="timetable-row free" data-slot="${index}">
                 <div class="lesson-slot"><span class="lesson-number">${slot.n}</span>
                     <span class="lesson-time">${slot.start}</span></div>
                 <div class="lesson-body"><span class="lesson-name muted">Free period</span></div>
@@ -2063,7 +2377,8 @@ function renderTimetable() {
         }
 
         const detail = [lesson.room, lesson.teacher].filter(Boolean).join(' · ');
-        return `<div class="timetable-row ${slot.n === liveLesson ? 'now' : ''} ${lesson.subjectId ? 'clickable' : ''}"
+        return `<div class="timetable-row ${slot.n === liveLesson ? 'now' : ''} ${lesson.subjectId ? 'clickable' : ''} ${lesson.edited ? 'edited' : ''}"
+                     data-slot="${index}"
                      ${lesson.subjectId ? `data-subject="${lesson.subjectId}"` : ''}>
             <div class="lesson-slot">
                 <span class="lesson-number">${slot.n}</span>
@@ -2076,14 +2391,57 @@ function renderTimetable() {
                     ${detail ? `<span class="lesson-detail">${detail}</span>` : ''}
                 </div>
                 ${lesson.block ? `<span class="lesson-block">${lesson.block}</span>` : ''}
+                ${lesson.edited ? '<span class="lesson-edited" title="Changed from the printed sheet"><i class="fas fa-pen"></i></span>' : ''}
                 ${slot.n === liveLesson ? '<span class="lesson-live">Now</span>' : ''}
             </div>
         </div>${breakRow}`;
     }).join('');
 
+    body.insertAdjacentHTML('beforeend', extracurricularMarkup(dayKey));
+
     body.querySelectorAll('.timetable-row.clickable').forEach(row => {
         row.addEventListener('click', () => switchToSubject(row.dataset.subject));
     });
+
+    const add = body.querySelector('[data-add-extra]');
+    if (add) add.addEventListener('click', () => showExtraModal(dayKey, null));
+}
+
+// The clubs section under the day's lessons. Always rendered, so there is
+// somewhere to right-click even on a day with nothing in it yet.
+function extracurricularMarkup(dayKey) {
+    const entries = extracurricularForDay(dayKey);
+
+    const rows = entries.map(entry => {
+        const detail = [entry.room, entry.teacher].filter(Boolean).join(' · ');
+        const time = entry.start ? `${entry.start}${entry.end ? ' – ' + entry.end : ''}` : '';
+        return `<div class="timetable-row extracurricular" data-extra="${entry.id}">
+            <div class="lesson-slot">
+                <span class="lesson-number"><i class="fas fa-star"></i></span>
+                ${time ? `<span class="lesson-time">${time}</span>` : ''}
+            </div>
+            <div class="lesson-body">
+                <span class="lesson-icon"><i class="fas ${entry.icon || 'fa-puzzle-piece'}"></i></span>
+                <div class="lesson-text">
+                    <span class="lesson-name">${escapeHtml(entry.name)}</span>
+                    ${detail ? `<span class="lesson-detail">${escapeHtml(detail)}</span>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    return `<div class="extracurricular-section" data-extra-section="1">
+        <div class="extracurricular-header">
+            <span><i class="fas fa-star"></i> Extracurricular</span>
+            <button class="extracurricular-add" data-add-extra="1">
+                <i class="fas fa-plus"></i> Add
+            </button>
+        </div>
+        ${rows || `<div class="timetable-free extracurricular-empty">
+            <i class="fas fa-puzzle-piece"></i> Nothing after lessons.
+            Right-click anywhere here, or use Add.
+        </div>`}
+    </div>`;
 }
 
 // Export data as CSV — every period, one row per subject per period
@@ -2731,6 +3089,20 @@ function initApp() {
             appState.sortMode = this.dataset.sort;
             renderOverallChart();
         });
+    });
+
+    bindTimetableContextMenu();
+
+    // Timetable edit dialogs
+    document.getElementById('lesson-save').addEventListener('click', saveLessonModal);
+    document.getElementById('extra-save').addEventListener('click', saveExtraModal);
+    document.getElementById('extra-delete').addEventListener('click', () => {
+        if (!editingExtra || !editingExtra.id) return;
+        deleteExtracurricular(editingExtra.id);
+        editingExtra = null;
+        closeAllModals();
+        renderTimetable();
+        showToast('Club removed');
     });
 
     // GPA breakdown buttons on the two GPA stat cards

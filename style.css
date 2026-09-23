@@ -3173,3 +3173,158 @@ select:not([data-enhanced]) {
         height: 6px;
     }
 }
+
+/* =====================================================================
+   Timetable customisation: right-click menu, edit dialogs, clubs
+   ===================================================================== */
+
+/* Two fields side by side inside a dialog */
+.form-row {
+    display: flex;
+    gap: 12px;
+}
+
+.form-row .form-group {
+    flex: 1;
+    min-width: 0;
+}
+
+.modal-subline {
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+/* The right-click menu itself. Fixed, because it is placed from the
+   pointer position and must not move when the list behind it scrolls. */
+.context-menu {
+    position: fixed;
+    z-index: 2000;
+    min-width: 190px;
+    padding: 5px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    animation: fadeIn 0.12s ease;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.context-menu-item i {
+    width: 14px;
+    color: var(--text-secondary);
+}
+
+.context-menu-item:hover {
+    background: var(--primary-color);
+    color: #fff;
+}
+
+.context-menu-item:hover i {
+    color: #fff;
+}
+
+.context-menu-item.danger:hover {
+    background: var(--danger-color);
+}
+
+/* A lesson that no longer matches the printed sheet says so */
+.timetable-row.edited .lesson-name {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--secondary-color);
+}
+
+.lesson-edited {
+    flex-shrink: 0;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 0.6rem;
+    color: var(--secondary-color);
+    background: color-mix(in srgb, var(--secondary-color) 14%, transparent);
+    border-radius: 999px;
+}
+
+/* Clubs hang under the day's lessons in their own block */
+.extracurricular-section {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border-color);
+}
+
+.extracurricular-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.extracurricular-header i {
+    color: var(--warning-color);
+}
+
+.extracurricular-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.extracurricular-add:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
+.timetable-row.extracurricular .lesson-number {
+    color: var(--warning-color);
+}
+
+.timetable-row.extracurricular .lesson-icon {
+    background: color-mix(in srgb, var(--warning-color) 18%, transparent);
+    color: var(--warning-color);
+}
+
+.extracurricular-empty {
+    font-size: 0.85rem;
+}

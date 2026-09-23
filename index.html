@@ -559,6 +559,92 @@
     </div>
 
     <!-- Custom Confirmation Modal -->
+    <!-- Change one lesson in the timetable. The printed sheet stays untouched;
+         this stores an override for the student's own grade. -->
+    <div id="lesson-modal" class="modal">
+        <div class="modal-content" style="max-width: 460px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-pen"></i> Change lesson</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-subline" id="lesson-modal-slot"></p>
+                <div class="form-group">
+                    <label for="lesson-subject-input">Graded subject</label>
+                    <select id="lesson-subject-input"></select>
+                    <small>Links the lesson to its grades page. Leave it off for
+                        anything you do not track marks for.</small>
+                </div>
+                <div class="form-group">
+                    <label for="lesson-name-input">Shown as</label>
+                    <input type="text" id="lesson-name-input" placeholder="e.g. Mathematics">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="lesson-room-input">Room</label>
+                        <input type="text" id="lesson-room-input" placeholder="e.g. 102">
+                    </div>
+                    <div class="form-group">
+                        <label for="lesson-teacher-input">Teacher</label>
+                        <input type="text" id="lesson-teacher-input" placeholder="e.g. Mr. Anvar">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="lesson-save" class="btn-primary">
+                    <i class="fas fa-check"></i> Save
+                </button>
+                <button class="btn-secondary close-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add or edit one extracurricular entry -->
+    <div id="extra-modal" class="modal">
+        <div class="modal-content" style="max-width: 460px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-star"></i> Extracurricular</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-subline" id="extra-modal-day"></p>
+                <div class="form-group">
+                    <label for="extra-name-input">Name</label>
+                    <input type="text" id="extra-name-input" placeholder="e.g. Robotics club">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="extra-start-input">Starts</label>
+                        <input type="time" id="extra-start-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="extra-end-input">Ends</label>
+                        <input type="time" id="extra-end-input">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="extra-room-input">Room</label>
+                        <input type="text" id="extra-room-input" placeholder="e.g. 103">
+                    </div>
+                    <div class="form-group">
+                        <label for="extra-teacher-input">Teacher</label>
+                        <input type="text" id="extra-teacher-input" placeholder="e.g. Mr. Ravshan">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="extra-save" class="btn-primary">
+                    <i class="fas fa-check"></i> Save
+                </button>
+                <button id="extra-delete" class="btn-danger" style="display:none;">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <button class="btn-secondary close-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- GPA breakdown: shows the exact rows behind whichever GPA was clicked -->
     <div id="gpa-info-modal" class="modal">
         <div class="modal-content" style="max-width: 640px;">
