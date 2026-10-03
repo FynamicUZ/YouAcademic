@@ -607,23 +607,19 @@ function getGradeFilterCategory(value, grade) {
 }
 
 /* ============================================================
-   GPA - two 4.0-scale methods, both credit-weighted
+   GPA - two methods
    ============================================================
-   Both use the standard quality-point formula:
+   - "school"  - out of 5, no credits. The school's own thresholds decide
+                 each subject's mark (5/4/3/2) and the GPA is the plain
+                 average of those marks. See calculateSchoolGPA.
+   - "us"      - out of 4.0, credit-weighted:
 
-       GPA = sum(grade points x credits) / sum(credits)
+                     GPA = sum(grade points x credits) / sum(credits)
 
-   They differ only in how a percentage becomes grade points:
-
-   - "school"  - the school's own thresholds decide the mark (5/4/3/2),
-                 then the mark maps to 4.0/3.0/2.0/0.0. Where the
-                 percentage sits inside its band adds the ± step, so 98%
-                 and 86% are not both a flat 4.0.
-   - "us"      - the standard US letter table applied straight to the
-                 percentage, ignoring the local thresholds.
-
-   Credits are the subject's weekly lesson count from the printed
-   timetable (contact hours), which is how credit hours are defined.
+                 The standard US letter table is applied straight to the
+                 percentage, ignoring the local thresholds. Credits are the
+                 subject's weekly lesson count from the printed timetable
+                 (contact hours), which is how credit hours are defined.
 */
 
 // Standard US percentage → letter → 4.0 points table
@@ -642,14 +638,6 @@ const US_GRADE_SCALE = [
     { min: 0,  letter: 'F',  points: 0.0 }
 ];
 
-// Base points for each local mark, and the letter each maps onto
-const SCHOOL_MARK_POINTS = {
-    '5': { points: 4.0, letter: 'A' },
-    '4': { points: 3.0, letter: 'B' },
-    '3': { points: 2.0, letter: 'C' },
-    '2': { points: 0.0, letter: 'F' }
-};
-
 // Subjects with no timetable slot still have to count for something
 const DEFAULT_CREDIT = 1;
 
@@ -658,38 +646,6 @@ function usGradePoints(percentage) {
     const row = US_GRADE_SCALE.find(r => percentage >= r.min) ||
         US_GRADE_SCALE[US_GRADE_SCALE.length - 1];
     return { points: row.points, letter: row.letter };
-}
-
-// School method: the local mark sets the base, position inside the band
-// sets the ± step. The failing band has no ± — an F is an F.
-function schoolGradePoints(percentage, grade) {
-    const thresholds = getThresholds(grade);
-    const mark = getFinalGrade(percentage, grade);
-    const base = SCHOOL_MARK_POINTS[mark];
-    if (!base) return { points: 0, letter: '-' };
-    if (mark === '2') return { points: 0, letter: 'F' };
-
-    // Band the percentage falls in, so we can find its position within it
-    const bands = {
-        '5': [thresholds['5'], 100],
-        '4': [thresholds['4'], thresholds['5']],
-        '3': [thresholds['3'], thresholds['4']]
-    };
-    const [low, high] = bands[mark];
-    const position = high > low ? (percentage - low) / (high - low) : 0.5;
-
-    // Bottom third is a minus, top third a plus, capped at 4.0
-    let points = base.points;
-    let letter = base.letter;
-    if (position < 1 / 3) {
-        points = base.points - 0.3;
-        letter = base.letter + '-';
-    } else if (position >= 2 / 3 && base.points < 4.0) {
-        points = base.points + 0.3;
-        letter = base.letter + '+';
-    }
-
-    return { points: Math.round(points * 10) / 10, letter };
 }
 
 // Weekly lesson count per subject key, read off the printed timetable.
@@ -726,14 +682,36 @@ function creditsForPeriod(record) {
     return out;
 }
 
-// Grade points for one percentage under the named method
-function gradePointsFor(method, percentage, grade) {
-    return method === 'us' ? usGradePoints(percentage) : schoolGradePoints(percentage, grade);
+// School GPA: the plain average of each subject's mark (5/4/3/2). No credits -
+// every subject counts the same. The monitoring here is per semester, so the
+// semester percentage stands in for the yearly grade the school itself uses.
+function calculateSchoolGPA(record) {
+    const rows = [];
+    let sum = 0;
+
+    record.subjects.forEach(subject => {
+        const grades = record.grades[subject.id];
+        if (!grades || grades.finalPercentage <= 0) return;
+
+        const percentage = grades.finalPercentage;
+        const mark = parseInt(getFinalGrade(percentage, record.grade), 10);
+        sum += mark;
+        rows.push({ name: subject.name, percentage, mark });
+    });
+
+    return {
+        gpa: rows.length > 0 ? Math.round((sum / rows.length) * 100) / 100 : 0,
+        sum,
+        count: rows.length,
+        rows
+    };
 }
 
 // Full credit-weighted GPA for a period, plus the per-subject rows the info
 // panel shows so the number can always be checked by hand.
 function calculateGPA(method, record) {
+    if (method === 'school') return calculateSchoolGPA(record);
+
     const credits = creditsForPeriod(record);
     const rows = [];
     let qualityPoints = 0;
@@ -745,7 +723,7 @@ function calculateGPA(method, record) {
 
         const percentage = grades.finalPercentage;
         const credit = credits[subject.id];
-        const { points, letter } = gradePointsFor(method, percentage, record.grade);
+        const { points, letter } = usGradePoints(percentage);
         const quality = points * credit;
 
         qualityPoints += quality;
@@ -1619,12 +1597,11 @@ function escapeHtml(value) {
 const GPA_METHOD_INFO = {
     school: {
         title: 'GPA - school scale',
-        method: "Your school's own thresholds decide the mark, then the mark maps onto " +
-            '4.0: a 5 is an A (4.0), a 4 is a B (3.0), a 3 is a C (2.0), a 2 is an F (0.0). ' +
-            'Where the percentage sits inside its band adds the +/- step (bottom ' +
-            'third -0.3, top third +0.3), so 98% and 86% are not both a flat 4.0. ' +
-            'This is ' +
-            'the GPA the history chart plots.'
+        method: "Out of 5, with no credits: every subject counts the same. Your school's " +
+            "own thresholds turn each subject's semester percentage into a mark (5, 4, 3 " +
+            "or 2) - the semester stands in for the yearly grade the school uses - and " +
+            'the GPA is the plain average of those marks. This is the GPA the history ' +
+            'chart plots.'
     },
     us: {
         title: 'GPA - US standard scale',
@@ -1644,10 +1621,24 @@ function showGPAInfo(method) {
     document.getElementById('gpa-info-title').textContent = info.title;
     document.getElementById('gpa-info-method').textContent = info.method;
 
+    const isSchool = method === 'school';
+    document.getElementById('gpa-info-head').innerHTML = isSchool
+        ? '<tr><th>Subject</th><th>%</th><th>Mark</th></tr>'
+        : '<tr><th>Subject</th><th>%</th><th>Grade</th><th>Points</th><th>Credits</th><th>Quality</th></tr>';
+    document.getElementById('gpa-info-credit-note').style.display = isSchool ? 'none' : '';
+
     const tbody = document.getElementById('gpa-info-rows');
     if (result.rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="gpa-info-empty">' +
             'No graded subjects in this period yet.</td></tr>';
+    } else if (isSchool) {
+        tbody.innerHTML = result.rows.map(row => `
+            <tr>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${row.percentage}%</td>
+                <td><span class="gpa-letter">${row.mark}</span></td>
+            </tr>
+        `).join('');
     } else {
         tbody.innerHTML = result.rows.map(row => `
             <tr>
@@ -1662,7 +1653,14 @@ function showGPAInfo(method) {
     }
 
     const formula = document.getElementById('gpa-info-formula');
-    if (result.totalCredits > 0) {
+    if (isSchool && result.count > 0) {
+        formula.innerHTML = `
+            <div class="gpa-formula-line">GPA = sum of marks &divide; number of subjects</div>
+            <div class="gpa-formula-math">
+                ${result.sum} &divide; ${result.count} =
+                <strong>${result.gpa.toFixed(2)}</strong> / 5.00
+            </div>`;
+    } else if (!isSchool && result.totalCredits > 0) {
         formula.innerHTML = `
             <div class="gpa-formula-line">GPA = total quality points &divide; total credits</div>
             <div class="gpa-formula-math">
@@ -1715,8 +1713,8 @@ function updateDashboardStats() {
 
     const overallAverage = subjectCount > 0 ? Math.round(totalPercentage / subjectCount) : 0;
 
-    // Both GPAs run on the same credit-weighted formula and differ only in how
-    // a percentage becomes grade points. See the GPA module above.
+    // School GPA is a plain average out of 5; US is credit-weighted out of 4.
+    // See the GPA module above.
     const record = activePeriodRecord();
     const schoolGPA = calculateGPA('school', record);
     const usGPA = calculateGPA('us', record);
@@ -1888,7 +1886,7 @@ function periodShortLabel(key) {
 
 // Average final percentage and GPA for one period, judged by that period's own
 // grade thresholds (a 5th-grader's 82% is a "5"; a 9th-grader's 82% is a "4").
-// The GPA is the credit-weighted school-scale one, so the history line and the
+// The GPA is the school-scale one, so the history line and the
 // dashboard card always report the same number for the same period.
 function periodStats(key) {
     const record = appState.periods[key];
@@ -2015,7 +2013,7 @@ function renderHistoryOverallChart(keys) {
                 },
                 yGpa: {
                     position: 'right',
-                    beginAtZero: true, max: 4, min: 0,
+                    beginAtZero: true, max: 5, min: 0,
                     grid: { display: false },
                     ticks: { color: '#f59e0b', stepSize: 1 }
                 },
@@ -2034,7 +2032,7 @@ function renderHistoryOverallChart(keys) {
                         title: items => periodLabel(keys[items[0].dataIndex]),
                         label: ctxItem => ctxItem.datasetIndex === 0
                             ? `Average: ${ctxItem.parsed.y}%`
-                            : `${ctxItem.dataset.label}: ${ctxItem.parsed.y.toFixed(2)} / 4.00`
+                            : `${ctxItem.dataset.label}: ${ctxItem.parsed.y.toFixed(2)} / ${ctxItem.datasetIndex === 1 ? '5.00' : '4.00'}`
                     }
                 }
             },
